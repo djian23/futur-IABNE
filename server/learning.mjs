@@ -24,6 +24,12 @@ import {
   currentSources,
 } from "./tutor.mjs";
 import {
+  correctionsLocked,
+  registerTeacherControlRoutes,
+  snapshotReport,
+  studentAiBlock,
+} from "./teacher-controls.mjs";
+import {
   detectSafetyConcern,
   recordSafetyAlert,
   registerSafetyRoutes,
@@ -129,7 +135,8 @@ function corpus(
       d.updated_at AS version,d.chapter_id,d.kind
     FROM document_chunks c JOIN documents d ON d.id=c.document_id
     WHERE d.school_id=? AND d.course_id=? AND d.status='published'
-      AND (? IS NULL OR d.chapter_id=?) AND (? IS NULL OR d.id=?) LIMIT 2000`,
+      AND (? IS NULL OR d.chapter_id=?) AND (? IS NULL OR d.id=?)
+      AND (d.kind<>'correction' OR ?=0) LIMIT 2000`,
     )
     .all(
       req.user.school_id,
@@ -138,6 +145,8 @@ function corpus(
       chapterId || null,
       documentId,
       documentId,
+      // Les corrigés encore verrouillés ne servent ni aux élèves ni à l'IA qui leur répond.
+      req.user.role === "student" && correctionsLocked(courseId) ? 1 : 0,
     );
   const terms = words(query).filter(
     (w) =>
@@ -463,6 +472,7 @@ export function registerLearningRoutes(app) {
   initializeTutor();
   initializeTeacherTutor();
   registerSafetyRoutes(app);
+  registerTeacherControlRoutes(app);
   registerTutorRoutes(app);
   registerTeacherTutorRoutes(app, { infer });
   registerPracticeAgent(app, {
@@ -522,6 +532,8 @@ export function registerLearningRoutes(app) {
     const helpMode = req.body.helpMode || "hint";
     if (!["hint", "method", "check", "solution"].includes(helpMode))
       return fail(res, 400, "Mode d’accompagnement invalide.");
+    const blocked = studentAiBlock(req.user, courseId, { help: helpMode });
+    if (blocked) return fail(res, 403, blocked);
     if (helpMode === "solution" && req.user.role === "student") {
       // La correction suit un essai : jamais en première demande ni hors exercice suivi.
       const tried = exercise
@@ -681,6 +693,10 @@ export function registerLearningRoutes(app) {
       return fail(res, 400, "Type demandé invalide.");
     if (AI_RECIPES[kind] && !AI_RECIPES[kind].roles.includes(req.user.role))
       return fail(res, 403, "Cet outil est réservé à un autre profil.");
+    const generationBlock = studentAiBlock(req.user, courseId, {
+      generate: true,
+    });
+    if (generationBlock) return fail(res, 403, generationBlock);
     if (
       req.body.instructions != null &&
       (typeof req.body.instructions !== "string" ||
@@ -860,9 +876,11 @@ export function registerLearningRoutes(app) {
       reason,
       now(),
     );
+    snapshotReport(req.user, courseId, id, targetId, reason);
     res.status(201).json({
       id,
-      message: "Signalement enregistré. Aucun envoi externe automatique.",
+      message:
+        "Signalement enregistré : le professeur du cours pourra le lire, sans voir ton nom.",
     });
   });
 
@@ -1183,6 +1201,8 @@ function registerQuizzes(app) {
   app.post("/api/quizzes", requireAuth, async (req, res) => {
     const { courseId, chapterId } = req.body || {};
     if (!courseFor(req, res, courseId)) return;
+    const quizBlock = studentAiBlock(req.user, courseId, { generate: true });
+    if (quizBlock) return fail(res, 403, quizBlock);
     if (
       chapterId != null &&
       (typeof chapterId !== "string" ||

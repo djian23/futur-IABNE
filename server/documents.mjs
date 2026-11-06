@@ -30,6 +30,16 @@ const delegatedOwner = (u, d) =>
   u.id === d.uploaded_by &&
   d.status === "draft" &&
   hasDelegation(u, d.course_id);
+const unreadable = (reason) =>
+  ({
+    encoding:
+      "Ce fichier texte n’est pas en UTF-8. Dans votre éditeur : Enregistrer sous → encodage UTF-8.",
+    pdf: "Ce fichier n’est pas un PDF valide. Réexportez-le depuis votre logiciel.",
+    pages:
+      "PDF limité à 100 pages. Découpez le document en plusieurs fichiers.",
+    docx: "Ce fichier n’est pas un document Word (.docx) valide ou il est trop volumineux une fois décompressé.",
+  })[reason] ||
+  "Document illisible ou trop complexe. Un scan (image) nécessite une extraction de texte (OCR) externe.";
 let activeExtractions = 0;
 async function extract(buffer, ext) {
   if (activeExtractions >= 2) throw new Error("Extraction capacity exceeded");
@@ -61,7 +71,11 @@ async function extract(buffer, ext) {
       );
       worker.once("message", (message) =>
         message.error
-          ? finish(new Error("Unreadable document"))
+          ? finish(
+              Object.assign(new Error("Unreadable document"), {
+                reason: message.reason,
+              }),
+            )
           : finish(null, message.text),
       );
       worker.once("error", (error) => finish(error));
@@ -188,11 +202,8 @@ export function registerDocumentRoutes(app) {
         try {
           extracted_text = await extract(req.file.buffer, ext);
           if (!extracted_text) extraction_status = "empty";
-        } catch {
-          return res.status(422).json({
-            error:
-              "Document illisible ou trop complexe. PDF : 100 pages maximum ; DOCX : 30 Mo décompressés. Un scan nécessite une extraction OCR externe.",
-          });
+        } catch (error) {
+          return res.status(422).json({ error: unreadable(error.reason) });
         }
         if (!canManageCourse(u, course_id) && !hasDelegation(u, course_id))
           return res
@@ -315,11 +326,8 @@ export function registerDocumentRoutes(app) {
         let extracted;
         try {
           extracted = await extract(req.file.buffer, ext);
-        } catch {
-          return res.status(422).json({
-            error:
-              "Extraction impossible : format, complexité ou délai dépassé.",
-          });
+        } catch (error) {
+          return res.status(422).json({ error: unreadable(error.reason) });
         }
         const storage = uid() + ext;
         stored = path.join(directory, storage);

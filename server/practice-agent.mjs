@@ -1,3 +1,4 @@
+import { studentAiBlock } from "./teacher-controls.mjs";
 import { db, uid, now, DATA_DIR } from "./db.mjs";
 import { requireAuth, canAccessCourse, canManageCourse } from "./auth.mjs";
 import { tutorContext, tutorSettings, currentSources } from "./tutor.mjs";
@@ -528,6 +529,10 @@ export function registerPracticeAgent(
   app.post("/api/agents/practice", requireAuth, (req, res) => {
     if (!canAccessCourse(req.user, req.body.courseId))
       return res.status(404).json({ error: "Cours introuvable." });
+    const aiBlock = studentAiBlock(req.user, req.body.courseId, {
+      generate: true,
+    });
+    if (aiBlock) return res.status(403).json({ error: aiBlock });
     let config;
     try {
       config = options(req.body);

@@ -93,6 +93,15 @@ export function accessibleDocument(user, d) {
     !canAccessCourse(user, d.course_id)
   )
     return false;
+  if (user.role === "student" && d.kind === "correction") {
+    // Corrigé verrouillé par le professeur jusqu'à une date.
+    const lock = db
+      .prepare(
+        "SELECT corrections_visible_from AS f FROM course_ai_settings WHERE course_id=?",
+      )
+      .get(d.course_id);
+    if (lock?.f && lock.f > now()) return false;
+  }
   return (
     canManageCourse(user, d.course_id) ||
     d.status === "published" ||

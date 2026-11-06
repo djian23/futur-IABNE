@@ -27,7 +27,11 @@ async function extract(buffer, ext) {
     try {
       const info = await parser.getInfo();
       if (info.total > 100) throw new Error("PDF limité à 100 pages");
-      value = (await parser.getText()).text;
+      // pdf-parse ajoute « -- 1 of 3 -- » : un PDF sans texte ne doit pas passer pour « prêt ».
+      value = (await parser.getText()).text.replace(
+        /^\s*--\s*\d+\s+of\s+\d+\s*--\s*$/gim,
+        "",
+      );
     } finally {
       await parser.destroy();
     }
@@ -42,6 +46,16 @@ try {
   parentPort.postMessage({
     text: await extract(Buffer.from(workerData.buffer), workerData.ext),
   });
-} catch {
-  parentPort.postMessage({ error: true });
+} catch (error) {
+  const message = String(error?.message || "");
+  const reason = /UTF|encoded|fatal|binaire/i.test(message)
+    ? "encoding"
+    : /PDF invalide/.test(message)
+      ? "pdf"
+      : /PDF limité/.test(message)
+        ? "pages"
+        : /DOCX invalide|décompressé/.test(message)
+          ? "docx"
+          : "other";
+  parentPort.postMessage({ error: true, reason });
 }

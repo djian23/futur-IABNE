@@ -29,6 +29,7 @@ import {
 import { api, post } from "./api";
 import { Form, Field, Select } from "./ui";
 import Administration from "./Admin";
+import { CourseAiSettings, Reports } from "./TeacherControls";
 import StudyContent from "./StudyContent";
 import PersonalTutor from "./PersonalTutor";
 import TeacherMethod from "./TeacherMethod";
@@ -46,8 +47,15 @@ const statuses = {
   published: "Publié",
   archived: "Archivé",
   pending: "En traitement",
-  ready: "Prêt",
+  ready: "Texte extrait",
+  empty: "Aucun texte lisible",
   failed: "Échec",
+};
+const kindLabels = {
+  lesson: "Cours",
+  exercise: "Exercice",
+  exam: "Contrôle d’entraînement",
+  correction: "Correction",
 };
 const date = (value) =>
   value
@@ -130,6 +138,7 @@ function App() {
       "planning",
       "account",
       "statistics",
+      "reports",
       "administration",
     ];
     const fromHash = () => {
@@ -242,7 +251,10 @@ function App() {
     ["planning", "Mon organisation", CalendarDays],
     ["account", "Mon compte", Settings],
     ...(staff
-      ? [["statistics", "Suivi pédagogique", ChartNoAxesCombined]]
+      ? [
+          ["statistics", "Suivi pédagogique", ChartNoAxesCombined],
+          ["reports", "Signalements", AlertCircle],
+        ]
       : []),
     ...(admin ? [["administration", "Administration", Users]] : []),
   ];
@@ -579,6 +591,7 @@ function App() {
           {view === "planning" && <Planning act={act} />}
           {view === "account" && <Account user={user} />}
           {view === "statistics" && <Statistics />}
+          {view === "reports" && staff && <Reports />}
           {view === "administration" && admin && (
             <Administration data={data} act={act} busy={busy} />
           )}
@@ -966,7 +979,7 @@ function DocumentList({ documents, staff, onStatus, onDelete, canDelete }) {
                 {title(d) || d.originalName || d.original_name || d.filename}
               </strong>
               <span>
-                {d.type || d.kind || "Document"} ·{" "}
+                {kindLabels[d.kind] || d.type || "Document"} ·{" "}
                 {date(d.createdAt || d.created_at)}{" "}
                 {d.uploaded_by_name && (
                   <span>· Déposé par {d.uploaded_by_name} </span>
@@ -1013,6 +1026,20 @@ function DocumentList({ documents, staff, onStatus, onDelete, canDelete }) {
             >
               <Download size={17} />
             </a>
+            {staff && onStatus && d.status === "draft" && (
+              <button
+                className="button small"
+                disabled={busy || d.processingStatus === "empty"}
+                title={
+                  d.processingStatus === "empty"
+                    ? "Aucun texte lisible : un scan ne peut pas être publié pour l’assistant."
+                    : "Rendre ce document visible par les élèves"
+                }
+                onClick={() => run(() => onStatus(d, "published"))}
+              >
+                Publier
+              </button>
+            )}
             {staff && onStatus && (
               <select
                 disabled={busy}
@@ -1066,6 +1093,13 @@ function DocumentList({ documents, staff, onStatus, onDelete, canDelete }) {
                 submit="Remplacer le fichier"
                 disabled={busy}
                 onSubmit={async (_, form) => {
+                  if (
+                    d.status === "published" &&
+                    !window.confirm(
+                      "Ce document est publié. Les élèves ne le verront plus tant que vous ne l’aurez pas republié après vérification. Continuer ?",
+                    )
+                  )
+                    return;
                   setBusy(true);
                   setError("");
                   try {
@@ -1225,6 +1259,7 @@ function Courses({
             )}
           </div>
           {staff && <TeacherMethod courseId={c.id} editor />}
+          {staff && <CourseAiSettings courseId={c.id} />}
           {upload && edit && (
             <div className="panel">
               <h3>Nouveau document</h3>
@@ -1232,21 +1267,39 @@ function Courses({
                 submit="Déposer le document"
                 disabled={busy}
                 onSubmit={async (_, form) => {
-                  const body = new FormData(form);
-                  body.set("course_id", c.id);
-                  body.set("kind", body.get("type"));
-                  body.delete("type");
-                  body.set("chapter_id", body.get("chapterId") || "");
-                  body.delete("chapterId");
+                  const values = new FormData(form);
+                  const files = [
+                    ...form.querySelector('input[type="file"]').files,
+                  ];
+                  const base = String(values.get("title") || "").trim();
+                  const stem = (f) => f.name.replace(/\.[^.]+$/, "");
                   const saved = await act(
-                    () => api("/api/documents", { method: "POST", body }),
-                    "Document déposé. Son statut de traitement est indiqué dans la liste.",
+                    async () => {
+                      for (const file of files) {
+                        const body = new FormData();
+                        body.set("course_id", c.id);
+                        body.set("kind", values.get("type"));
+                        body.set("chapter_id", values.get("chapterId") || "");
+                        body.set(
+                          "title",
+                          files.length > 1
+                            ? [base, stem(file)].filter(Boolean).join(" – ")
+                            : base || stem(file),
+                        );
+                        body.set("file", file);
+                        await api("/api/documents", { method: "POST", body });
+                      }
+                    },
+                    `${files.length} document${files.length > 1 ? "s déposés" : " déposé"}. Le statut de traitement est indiqué dans la liste ; publiez-les quand vous les avez vérifiés.`,
                   );
                   if (saved) setUpload(false);
                 }}
               >
                 <div className="form-grid">
-                  <Field label="Titre" name="title" required />
+                  <Field
+                    label="Titre (avec plusieurs fichiers : préfixe du titre)"
+                    name="title"
+                  />
                   <Select
                     label="Chapitre"
                     name="chapterId"
@@ -1264,10 +1317,11 @@ function Courses({
                     </select>
                   </Field>
                   <Field
-                    label="Fichier PDF, Word ou texte"
+                    label="Fichiers PDF, Word ou texte (plusieurs possibles)"
                     type="file"
                     name="file"
                     accept=".pdf,.docx,.txt"
+                    multiple
                     required
                   />
                 </div>
