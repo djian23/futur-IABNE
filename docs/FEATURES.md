@@ -17,6 +17,11 @@ Le cahier des charges V3 et l’ajout des élèves délégués constituent le p�
 | Suivi professeur | Consultations, questions et thèmes agrégés ; notions à revoir issues des réponses aux quiz ; seuil de cinq élèves pour limiter l’identification. Pas d’accès général aux conversations individuelles. |
 | Organisation du travail | Disponibilités, cours, indisponibilités, tâches, difficulté perçue, échéances, sessions réparties et plafonds quotidiens ; signalement du travail impossible à placer. |
 | École Directe | Connecteur communautaire expérimental, activation volontaire, vérification QCM, jetons chiffrés, synchronisation manuelle bornée de l’emploi du temps et des devoirs, imports sans doublons et déconnexion. Désactivé par défaut. |
+| Administration | Codes d’activation (l’administration ne connaît pas les mots de passe), import CSV avec aperçu et fiches imprimables, recherche de comptes, modification/archivage/suppression des classes, groupes d’enseignement, changement de classe, passage d’année, co-enseignants et remplaçants, journal d’audit, suppression et export RGPD, double authentification facultative. Voir [ADMINISTRATION.md](ADMINISTRATION.md). |
+| Groupes de travail | Groupes de révision, binômes (havrouta) et projets encadrés, sur invitation, sans messages privés, heures calmes, consultation des adultes visible, créneaux communs avec consentement. Voir [GROUPES.md](GROUPES.md). |
+| Contrôles du professeur | Par cours : IA activable, niveau d’aide maximal, génération par les élèves, corrigés verrouillés jusqu’à une date (appliqués côté serveur) ; file des signalements de réponses IA sans identité de l’élève. |
+| Sécurité des mineurs | Circuit de détresse et de harcèlement (numéros d’aide, alerte sans contenu) ; correction expliquée jamais sans tentative. Voir [SECURITE_MINEURS.md](SECURITE_MINEURS.md). |
+| Calendrier | Chabbat, fêtes et jours sans travail exclus du planning et des programmes de révision ; disponibilités hebdomadaires. Voir [CALENDRIER.md](CALENDRIER.md). |
 | Interface | Français, ordinateur et mobile, formulaires étiquetés et erreurs explicites ; rendu IA sans HTML exécutable. L’accessibilité complète reste à auditer. |
 | Railway | Docker multiétape, interface et API sur le même service, `PORT`, contrôle de santé, volume persistant, sessions sécurisées et processus applicatif non privilégié. |
 | Sauvegardes | Scripts de sauvegarde et restauration, vérification SQLite et SHA-256, refus d’écraser une installation, révocation des sessions restaurées. Maintenance préalable requise. |
@@ -43,9 +48,10 @@ Le cahier des charges V3 et l’ajout des élèves délégués constituent le p�
 - Une seule instance applicative avec SQLite et stockage sur volume ; une montée en charge multi-instance nécessite une évolution du stockage.
 - Pas d’OCR intégré, de prise en charge `.doc`, ni de garantie de restitution des équations, schémas et manuscrits. L’aperçu textuel ne conserve pas la mise en page des originaux.
 - Historique des versions consultable en métadonnées ; restauration d’une ancienne version non proposée dans l’interface.
-- Pas de rétention automatique globale ni de suppression administrative complète d’une identité et de toutes ses dépendances ; les données réelles exigent cette politique et son outillage.
+- Pas de rétention automatique globale (la suppression complète d’un compte existe, à la demande de l’administration). Une politique de conservation reste à définir.
 - Pas de prédiction des résultats, d’application mobile native ni de console commerciale multiétablissement : ces éléments figurent dans la vision long terme du document.
-- Pas d’envoi automatique de mails : activation et récupération des comptes sont gérées par l’administration.
+- Pas d’envoi automatique de mails : activation (code d’activation) et récupération des comptes sont gérées par l’administration.
+- Pas encore réalisés : rendu des formules (LaTeX), OCR, recherche sémantique ou plein texte, routage des modèles par tâche et coûts en euros, « voir comme un élève », comptes parents, notifications, quiz de groupe, correction de copies, révisions espacées automatiques.
 
 Voir [OPERATIONS.md](OPERATIONS.md), [API.md](API.md) et [ECOLEDIRECTE.md](ECOLEDIRECTE.md) pour les détails d’exploitation et d’intégration.
 

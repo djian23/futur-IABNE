@@ -48,3 +48,15 @@ Les fournisseurs IA et École Directe sont simulés uniquement dans des processu
 Le conteneur a été exécuté localement, avec un volume jetable et des comptes synthétiques. Aucun service Railway distant n’a été déployé. Le code reste dans le checkout local ; aucun push GitHub n’a été effectué.
 
 Les tests techniques ne prouvent ni la qualité pédagogique des réponses d’un modèle réel, ni la compatibilité actuelle de l’API communautaire, ni une conformité RGPD complète. Voir [FEATURES.md](FEATURES.md) pour les limites et [OPERATIONS.md](OPERATIONS.md) pour la mise en service.
+
+## Évolutions issues de la recherche de cas d’usage — vérifications
+
+Vérifications exécutées sur la branche de développement :
+
+| Vérification | Résultat |
+| --- | --- |
+| `npm test` | 127 tests réussis, aucun échec. Nouvelles suites : sécurité (détresse, hébreu, correction après essai), administration (activation, import, suppression RGPD, audit, 2FA, passage d’année, co-enseignants), contrôles du professeur, calendrier (dates et horaires de référence, planning), groupes (permissions). |
+| `npm run build`, `prettier --check` | Réussis. |
+| Chromium (iPhone SE et PC) | Menu mobile défilant avec « Se déconnecter » accessible ; bouton retour du navigateur ; onglets d’administration ; import CSV, fiches de connexion et activation d’un compte ; parcours de groupe à trois profils (élève, élève invité, professeur) avec consultation visible des élèves. Aucune erreur JavaScript. |
+
+**Ce que ces vérifications ne prouvent pas :** la justesse des horaires de Chabbat et de fêtes face aux horaires officiels (calcul astronomique approché, à faire valider) ; la qualité de la détection de détresse (motifs simples, non évalués sur des propos réels d’élèves) ; la qualité pédagogique des réponses d’un vrai modèle (aucune clé réelle utilisée) ; un déploiement Railway ; la conformité RGPD (documents de `docs/conformite/` en brouillon). Les tests de groupes figent l’heure du serveur de test pour les heures calmes.
