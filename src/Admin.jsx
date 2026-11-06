@@ -1093,6 +1093,98 @@ function AuditLog() {
   );
 }
 
+function SchoolCalendar() {
+  const [data, setData] = useState({ rest: [], entries: [], note: "" }),
+    [error, setError] = useState("");
+  const from = new Date().toISOString().slice(0, 10);
+  const load = useCallback(() => {
+    api(`/api/calendar?from=${from}&days=62`)
+      .then(setData)
+      .catch((e) => setError(e.message));
+  }, [from]);
+  useEffect(load, [load]);
+  return (
+    <div className="two-col">
+      <div className="panel">
+        <h3>Ajouter une date au calendrier</h3>
+        <p className="muted">
+          Chabbat et les fêtes sont déjà exclus automatiquement des plannings.
+          Ajoutez ici les jours supplémentaires sans travail (jeûne, deuil…) ou
+          de simples informations (vacances, sorties).
+        </p>
+        <Form
+          submit="Ajouter"
+          onSubmit={async (v, form) => {
+            await post("/api/admin/calendar", v);
+            form.reset();
+            load();
+          }}
+        >
+          <Field label="Premier jour" type="date" name="start_date" required />
+          <Field label="Dernier jour" type="date" name="end_date" required />
+          <Field label="Libellé" name="label" maxLength="120" required />
+          <Field label="Type">
+            <select name="kind">
+              <option value="rest">
+                Jour sans travail (aucune séance de révision planifiée)
+              </option>
+              <option value="info">Information seulement</option>
+            </select>
+          </Field>
+        </Form>
+        {data.entries.map((e) => (
+          <div className="list-item" key={e.id}>
+            <span>
+              <strong>{e.label}</strong>
+              <small>
+                {e.start_date} → {e.end_date} ·{" "}
+                {e.kind === "rest" ? "sans travail" : "information"}
+              </small>
+            </span>
+            <button
+              className="text-button danger"
+              onClick={() =>
+                api(`/api/admin/calendar/${e.id}`, { method: "DELETE" }).then(
+                  load,
+                )
+              }
+            >
+              Supprimer
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="panel">
+        <h3>Périodes sans travail des 2 prochains mois</h3>
+        {error && <div className="alert error">{error}</div>}
+        <p className="muted">{data.note}</p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>De</th>
+                <th>À</th>
+                <th>Motif</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rest.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.date}</td>
+                  <td>{r.startTime}</td>
+                  <td>{r.endTime}</td>
+                  <td>{r.name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TwoFactor({ user }) {
   const [setup, setSetup] = useState(null),
     [message, setMessage] = useState("");
@@ -1169,6 +1261,7 @@ export default function Administration({ data, act, busy }) {
     ["import", "Importer"],
     ["structure", "Classes & cours"],
     ["year", "Nouvelle année"],
+    ["calendar", "Calendrier"],
     ["security", "Sécurité"],
     ["audit", "Journal"],
   ];
@@ -1192,6 +1285,7 @@ export default function Administration({ data, act, busy }) {
       {tab === "import" && <ImportAccounts busy={busy} />}
       {tab === "structure" && <Structure data={data} act={act} busy={busy} />}
       {tab === "year" && <SchoolYear data={data} act={act} busy={busy} />}
+      {tab === "calendar" && <SchoolCalendar />}
       {tab === "security" && <TwoFactor user={data.user} />}
       {tab === "audit" && <AuditLog />}
     </>

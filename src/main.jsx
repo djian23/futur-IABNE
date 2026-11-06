@@ -2659,19 +2659,26 @@ function Planning() {
       sessions: [],
     }),
     [error, setError] = useState(""),
-    [warnings, setWarnings] = useState([]);
+    [warnings, setWarnings] = useState([]),
+    [unscheduled, setUnscheduled] = useState([]);
   async function load() {
     try {
-      const [a, t, s, e] = await Promise.all([
+      const [a, t, s, e, r, c] = await Promise.all([
         api("/api/planner/availability"),
         api("/api/planner/tasks"),
         api("/api/planner/sessions"),
         api("/api/integrations/ecoledirecte/status"),
+        api("/api/planner/recurring"),
+        api(
+          `/api/calendar?from=${new Date().toISOString().slice(0, 10)}&days=10`,
+        ),
       ]);
       setData({
         availability: a.availability || [],
         tasks: t.tasks || [],
         sessions: s.sessions || [],
+        recurring: r.recurring || [],
+        rest: c.rest || [],
         ecoleDirecte: e,
       });
       setError("");
@@ -2698,12 +2705,107 @@ function Planning() {
           {error}
         </div>
       )}
+      <div className="alert" role="note">
+        Chabbat, les fêtes et les jours sans travail de l’établissement sont
+        automatiquement exclus de votre planning
+        {data.rest?.length
+          ? ` (prochainement : ${data.rest
+              .slice(0, 3)
+              .map(
+                (r) => `${date(r.date)} ${r.startTime}–${r.endTime}, ${r.name}`,
+              )
+              .join(" ; ")})`
+          : ""}
+        . Les horaires sont ceux de Paris.
+      </div>
       <div className="two-col">
         <div className="panel">
           <Section
             title="Mes disponibilités"
             subtitle="Les moments où vous pouvez travailler sereinement."
           />
+          <h3>Chaque semaine</h3>
+          <Form
+            submit="Ajouter un créneau hebdomadaire"
+            onSubmit={async (v) => {
+              await post("/api/planner/recurring", {
+                weekday: Number(v.weekday),
+                startTime: v.startTime,
+                endTime: v.endTime,
+                untilDate: v.untilDate || null,
+                kind: v.kind,
+              });
+              await load();
+            }}
+          >
+            <Field label="Jour de la semaine">
+              <select name="weekday">
+                {[
+                  "Lundi",
+                  "Mardi",
+                  "Mercredi",
+                  "Jeudi",
+                  "Vendredi",
+                  "Samedi",
+                  "Dimanche",
+                ].map((d, i) => (
+                  <option key={d} value={i + 1}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="form-grid">
+              <Field label="De" type="time" name="startTime" required />
+              <Field label="À" type="time" name="endTime" required />
+            </div>
+            <Field label="Type de créneau">
+              <select name="kind">
+                <option value="available">Disponible pour travailler</option>
+                <option value="unavailable">Indisponible</option>
+                <option value="class">Cours</option>
+              </select>
+            </Field>
+            <Field label="Jusqu’au (facultatif)" type="date" name="untilDate" />
+          </Form>
+          {(data.recurring || []).map((r) => (
+            <div className="list-item" key={r.id}>
+              <Clock size={16} />
+              <span>
+                Chaque{" "}
+                {
+                  [
+                    "lundi",
+                    "mardi",
+                    "mercredi",
+                    "jeudi",
+                    "vendredi",
+                    "samedi",
+                    "dimanche",
+                  ][r.weekday - 1]
+                }{" "}
+                · {r.start_time}–{r.end_time}
+                <small>
+                  {
+                    {
+                      available: "Disponible",
+                      unavailable: "Indisponible",
+                      class: "Cours",
+                    }[r.kind]
+                  }
+                  {r.until_date ? ` · jusqu’au ${date(r.until_date)}` : ""}
+                </small>
+              </span>
+              <button
+                className="icon-button"
+                aria-label="Supprimer le créneau hebdomadaire"
+                onClick={() => remove("recurring", r.id)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+          <h3 style={{ marginTop: 20 }}>Un jour précis</h3>
           <Form
             submit="Ajouter un créneau"
             onSubmit={async (v) => {
@@ -2789,8 +2891,20 @@ function Planning() {
           </Form>
           {data.tasks.map((t) => (
             <div className="list-item" key={t.id}>
-              <FileText size={16} />
-              <span>
+              <input
+                type="checkbox"
+                aria-label={`Terminé : ${title(t)}`}
+                checked={Boolean(t.completed)}
+                onChange={async (e) => {
+                  await post(`/api/planner/tasks/${t.id}/complete`, {
+                    completed: e.target.checked,
+                  });
+                  await load();
+                }}
+              />
+              <span
+                style={t.completed ? { textDecoration: "line-through" } : {}}
+              >
                 {title(t)}
                 <small>
                   {date(t.due_date || t.dueDate)} ·{" "}
@@ -2817,11 +2931,12 @@ function Planning() {
           submit="Organiser mes révisions"
           onSubmit={async (v) => {
             const r = await post("/api/planner/generate", {
-              ...v,
-              days: 14,
-              maxDailyMinutes: 120,
+              startDate: v.startDate,
+              days: Number(v.days),
+              maxDailyMinutes: Number(v.maxDailyMinutes),
             });
             setWarnings(r.warnings || []);
+            setUnscheduled(r.unscheduled || []);
             await load();
           }}
         >
@@ -2832,6 +2947,27 @@ function Planning() {
             defaultValue={new Date().toISOString().slice(0, 10)}
             required
           />
+          <div className="form-grid">
+            <Field
+              label="Sur combien de jours (7 à 31)"
+              name="days"
+              type="number"
+              min="7"
+              max="31"
+              defaultValue="14"
+              required
+            />
+            <Field
+              label="Maximum de travail par jour (minutes)"
+              name="maxDailyMinutes"
+              type="number"
+              min="30"
+              max="240"
+              step="15"
+              defaultValue="120"
+              required
+            />
+          </div>
         </Form>
         {data.sessions.length ? (
           <div className="session-grid">
@@ -2854,6 +2990,16 @@ function Planning() {
             title="Un planning à votre rythme"
             text="Ajoutez vos disponibilités et vos tâches, puis lancez l’organisation."
           />
+        )}
+        {unscheduled.length > 0 && (
+          <div className="alert error" role="alert">
+            <strong>À placer autrement :</strong>
+            {unscheduled.map((u) => (
+              <p key={u.taskId}>
+                {u.title} : {u.remainingMinutes} min non planifiées. {u.reason}
+              </p>
+            ))}
+          </div>
         )}
         {warnings.map((w, i) => (
           <div className="alert" key={i}>
