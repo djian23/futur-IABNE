@@ -812,3 +812,95 @@ test("suppression RGPD d’un élève riche en données : aucune trace dans aucu
   const gone = await request("/api/auth/me", { cookie });
   assert.equal(gone.response.status, 401);
 });
+
+test("co-enseignant et remplaçant : droits limités à leur fenêtre de dates", async () => {
+  const email = `${uniq("remp")}@exemple.fr`;
+  const created = await admin("/api/admin/users", "POST", {
+    name: "Prof Remplaçant Deux",
+    role: "teacher",
+    email,
+  });
+  const activated = await request("/api/auth/activate", {
+    method: "POST",
+    body: {
+      identifier: email,
+      code: created.data.user.activation_code,
+      newPassword: "Remplaçant très sérieux 3",
+    },
+  });
+  const cookie = activated.response.headers.get("set-cookie").split(";")[0];
+  const addChapter = () =>
+    request("/api/chapters", {
+      cookie,
+      method: "POST",
+      body: { course_id: "course-demo", title: uniq("Chapitre ") },
+    });
+  assert.equal(
+    (await addChapter()).response.status,
+    403,
+    "Sans rattachement, pas de droits",
+  );
+  const day = 86400000;
+  const past = await admin("/api/admin/course-teachers", "POST", {
+    course_id: "course-demo",
+    teacher_id: created.data.user.id,
+    role: "substitute",
+    starts_at: new Date(Date.now() - 10 * day).toISOString(),
+    ends_at: new Date(Date.now() - day).toISOString(),
+  });
+  assert.equal(past.response.status, 201, JSON.stringify(past.data));
+  assert.equal((await addChapter()).response.status, 403, "Fenêtre expirée");
+  await admin("/api/admin/course-teachers", "POST", {
+    course_id: "course-demo",
+    teacher_id: created.data.user.id,
+    role: "substitute",
+    ends_at: new Date(Date.now() + 5 * day).toISOString(),
+  });
+  assert.equal(
+    (await addChapter()).response.status,
+    201,
+    "Remplaçant dans sa fenêtre",
+  );
+  const boot = await request("/api/bootstrap", { cookie });
+  assert.ok(boot.data.courses.some((c) => c.id === "course-demo"));
+  assert.ok(boot.data.classes.some((c) => c.id === "class-demo"));
+  const list = await admin("/api/admin/course-teachers");
+  assert.ok(
+    list.data.entries.some(
+      (e) => e.teacher_id === created.data.user.id && e.role === "substitute",
+    ),
+  );
+  assert.equal(
+    (
+      await admin("/api/admin/course-teachers", "POST", {
+        course_id: "course-demo",
+        teacher_id: "teacher-demo",
+      })
+    ).response.status,
+    400,
+    "Le titulaire n’est pas un co-enseignant",
+  );
+  assert.equal(
+    (
+      await admin("/api/admin/course-teachers", "POST", {
+        course_id: "course-demo",
+        teacher_id: accounts.student.user.id,
+      })
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (
+      await admin(
+        `/api/admin/course-teachers/course-demo/${created.data.user.id}`,
+        "DELETE",
+      )
+    ).response.status,
+    200,
+  );
+  assert.equal((await addChapter()).response.status, 403, "Droits retirés");
+  assert.equal(
+    (await as("teacher", "/api/admin/course-teachers")).response.status,
+    403,
+  );
+});

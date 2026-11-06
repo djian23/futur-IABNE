@@ -86,6 +86,11 @@ function initialize() {
     CREATE TABLE IF NOT EXISTS learning_reports (
       id TEXT PRIMARY KEY,user_id TEXT NOT NULL,school_id TEXT NOT NULL,course_id TEXT NOT NULL,
       target_id TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id TEXT PRIMARY KEY,user_id TEXT NOT NULL,school_id TEXT NOT NULL,route TEXT NOT NULL,
+      model TEXT NOT NULL,input_tokens INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_log_school ON ai_usage_log(school_id,created_at);
     CREATE TABLE IF NOT EXISTS learning_usage (
       id TEXT PRIMARY KEY,user_id TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS learning_availability (
@@ -224,7 +229,7 @@ function provider() {
     return {
       kind: "anthropic",
       key: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
       url: "https://api.anthropic.com/v1/messages",
     };
   if (process.env.AI_API_KEY) {
@@ -405,6 +410,18 @@ async function infer(
       return null;
     }
     const payload = await response.json();
+    // Suivi des volumes (jetons) par établissement ; jamais le contenu des échanges.
+    const usage = payload.usage || {};
+    db.prepare("INSERT INTO ai_usage_log VALUES (?,?,?,?,?,?,?,?)").run(
+      uid(),
+      req.user.id,
+      req.user.school_id,
+      String(req.path || "").slice(0, 80),
+      String(p.model || "").slice(0, 80),
+      Number(usage.input_tokens ?? usage.prompt_tokens) || 0,
+      Number(usage.output_tokens ?? usage.completion_tokens) || 0,
+      now(),
+    );
     const answer = text(
       p.kind === "anthropic"
         ? payload.content

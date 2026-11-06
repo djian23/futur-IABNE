@@ -81,7 +81,7 @@ before(async () => {
         else throw new Error('Unknown synthetic provider mutation');
         db.close();
       }
-      return new Response(JSON.stringify({ content: [{ type: 'text', text: config.answer }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: config.answer }], usage: { input_tokens: 111, output_tokens: 22 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     };
   `,
   );
@@ -288,6 +288,15 @@ test("frontière fournisseur simulée : seule la source publiée autorisée part
     ["source-public"],
   );
   assert.match(result.data.answer, /synthétique de test.*\[S1\]/);
+  const usage = fixtureDb.prepare("SELECT * FROM ai_usage_log").all();
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0].input_tokens, 111);
+  assert.equal(usage[0].output_tokens, 22);
+  assert.equal(usage[0].route, "/api/ai/chat");
+  assert.ok(
+    !JSON.stringify(usage).includes("raison constante"),
+    "Le contenu n’est pas journalisé",
+  );
   const capture = JSON.parse(await readFile(capturedPath, "utf8"));
   assert.equal(capture.url, "https://api.anthropic.com/v1/messages");
   const prompt = JSON.stringify(capture.body);

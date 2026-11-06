@@ -33,6 +33,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_login_id ON user_extras(login_id) WHE
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_external_id ON user_extras(school_id,external_id) WHERE external_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS audit_log(id TEXT PRIMARY KEY,school_id TEXT NOT NULL,actor_id TEXT NOT NULL,action TEXT NOT NULL,target_type TEXT,target_id TEXT,details TEXT,created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_audit_school ON audit_log(school_id,created_at);
+CREATE TABLE IF NOT EXISTS course_teachers(course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,role TEXT NOT NULL DEFAULT 'co' CHECK(role IN ('co','substitute')),starts_at TEXT,ends_at TEXT,PRIMARY KEY(course_id,teacher_id));
 CREATE TABLE IF NOT EXISTS classes_meta(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,kind TEXT NOT NULL DEFAULT 'class' CHECK(kind IN ('class','group')),archived_at TEXT);
 `);
 

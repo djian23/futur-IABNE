@@ -491,6 +491,11 @@ export function registerAdminRoutes(app) {
           month,
         ),
         hourlySchoolLimit: Number(process.env.AI_SCHOOL_HOURLY_LIMIT || 200),
+        tokensLast30Days: db
+          .prepare(
+            "SELECT COALESCE(SUM(input_tokens),0) AS input,COALESCE(SUM(output_tokens),0) AS output FROM ai_usage_log WHERE school_id=? AND created_at>=?",
+          )
+          .get(sid, month),
       },
       attention: {
         openSafetyAlerts: one(
@@ -1074,6 +1079,68 @@ export function registerAdminRoutes(app) {
     });
     res.json({ course: { ...course, title, teacher_id: teacherId } });
   });
+
+  // Co-enseignants et remplaçants : droits de gestion du cours dans une fenêtre de dates.
+  app.get("/api/admin/course-teachers", ...guard, (req, res) => {
+    res.json({
+      entries: db
+        .prepare(
+          `SELECT t.course_id,t.teacher_id,t.role,t.starts_at,t.ends_at,c.title,u.name AS teacher_name
+           FROM course_teachers t JOIN courses c ON c.id=t.course_id JOIN users u ON u.id=t.teacher_id
+           WHERE c.school_id=? ORDER BY c.title,u.name`,
+        )
+        .all(req.user.school_id),
+    });
+  });
+  app.post("/api/admin/course-teachers", ...guard, (req, res) => {
+    const course = scoped("courses", req.body.course_id, req.user.school_id);
+    const teacher = scoped("users", req.body.teacher_id, req.user.school_id);
+    const role = req.body.role === "substitute" ? "substitute" : "co";
+    const date = (v) => (v ? new Date(v) : null);
+    const starts = date(req.body.starts_at),
+      ends = date(req.body.ends_at);
+    if (
+      !course ||
+      teacher?.role !== "teacher" ||
+      teacher.id === course.teacher_id ||
+      [starts, ends].some((d) => d && Number.isNaN(d.getTime())) ||
+      (starts && ends && ends < starts)
+    )
+      return bad(
+        res,
+        "Cours, enseignant (différent du titulaire) et dates valides requis.",
+      );
+    db.prepare(
+      `INSERT INTO course_teachers(course_id,teacher_id,role,starts_at,ends_at) VALUES (?,?,?,?,?)
+       ON CONFLICT(course_id,teacher_id) DO UPDATE SET role=excluded.role,starts_at=excluded.starts_at,ends_at=excluded.ends_at`,
+    ).run(
+      course.id,
+      teacher.id,
+      role,
+      starts?.toISOString() || null,
+      ends?.toISOString() || null,
+    );
+    audit(req, "course.teacher_add", "course", course.id, {
+      teacher: teacher.id,
+      role,
+    });
+    res.status(201).json({ ok: true });
+  });
+  app.delete(
+    "/api/admin/course-teachers/:courseId/:teacherId",
+    ...guard,
+    (req, res) => {
+      const course = scoped("courses", req.params.courseId, req.user.school_id);
+      if (!course) return bad(res, "Cours introuvable.", 404);
+      db.prepare(
+        "DELETE FROM course_teachers WHERE course_id=? AND teacher_id=?",
+      ).run(course.id, req.params.teacherId);
+      audit(req, "course.teacher_remove", "course", course.id, {
+        teacher: req.params.teacherId,
+      });
+      res.json({ deleted: true });
+    },
+  );
 
   // Changement de classe en une action, sans état intermédiaire à deux classes.
   app.post("/api/admin/students/:id/move", ...guard, (req, res) => {

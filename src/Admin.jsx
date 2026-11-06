@@ -171,6 +171,12 @@ function Overview() {
           [structure.publishedDocuments, "documents publiés"],
           [ai.requestsLast7Days, "demandes IA sur 7 jours"],
           [attention.openAiReports, "signalements de réponses IA"],
+          [
+            Math.round(
+              (ai.tokensLast30Days.input + ai.tokensLast30Days.output) / 1000,
+            ),
+            "milliers de jetons IA sur 30 jours",
+          ],
         ].map(([value, label]) => (
           <div className="stat" key={label}>
             <div>
@@ -885,6 +891,7 @@ function Structure({ data, act, busy }) {
               </select>
             </div>
           ))}
+          <CourseTeachers data={data} busy={busy} />
           <h4 style={{ marginTop: 16 }}>Affectations</h4>
           {(data.assignments || []).map((a) => (
             <div
@@ -905,6 +912,79 @@ function Structure({ data, act, busy }) {
           ))}
         </div>
       </div>
+    </>
+  );
+}
+
+function CourseTeachers({ data, busy }) {
+  const [entries, setEntries] = useState([]),
+    [error, setError] = useState("");
+  const teachers = (data.users || []).filter((u) => u.role === "teacher");
+  const load = useCallback(() => {
+    api("/api/admin/course-teachers")
+      .then((r) => setEntries(r.entries))
+      .catch((e) => setError(e.message));
+  }, []);
+  useEffect(load, [load]);
+  return (
+    <>
+      <h4 style={{ marginTop: 16 }}>Co-enseignants et remplaçants</h4>
+      <p className="muted">
+        Donne à un autre professeur les droits de gestion d’un cours (documents,
+        réglages), pour un remplacement ou un cours partagé. Le titulaire garde
+        la validation de la méthode.
+      </p>
+      {error && <div className="alert error">{error}</div>}
+      {entries.map((e) => (
+        <div className="list-item" key={e.course_id + e.teacher_id}>
+          <span>
+            <strong>{e.teacher_name}</strong>
+            <small>
+              {e.role === "substitute" ? "Remplaçant" : "Co-enseignant"} ·{" "}
+              {e.title}
+              {e.ends_at
+                ? ` · jusqu’au ${new Date(e.ends_at).toLocaleDateString("fr-FR")}`
+                : ""}
+            </small>
+          </span>
+          <button
+            className="text-button danger"
+            onClick={() =>
+              api(`/api/admin/course-teachers/${e.course_id}/${e.teacher_id}`, {
+                method: "DELETE",
+              }).then(load)
+            }
+          >
+            Retirer
+          </button>
+        </div>
+      ))}
+      <Form
+        submit="Ajouter"
+        disabled={busy}
+        onSubmit={async (v, form) => {
+          await post("/api/admin/course-teachers", {
+            course_id: v.course_id,
+            teacher_id: v.teacher_id,
+            role: v.role,
+            ends_at: v.ends_at
+              ? new Date(`${v.ends_at}T23:59:59`).toISOString()
+              : null,
+          });
+          form.reset();
+          load();
+        }}
+      >
+        <Select label="Cours" name="course_id" items={data.courses || []} />
+        <Select label="Professeur" name="teacher_id" items={teachers} />
+        <Field label="Rôle">
+          <select name="role">
+            <option value="substitute">Remplaçant</option>
+            <option value="co">Co-enseignant</option>
+          </select>
+        </Field>
+        <Field label="Jusqu’au (facultatif)" type="date" name="ends_at" />
+      </Form>
     </>
   );
 }

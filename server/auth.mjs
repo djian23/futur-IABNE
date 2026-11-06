@@ -46,6 +46,17 @@ export function requireAuth(req, res, next) {
     });
   next();
 }
+// Co-enseignant ou remplaçant : droits de gestion du cours dans sa fenêtre de dates.
+function isCoTeacher(teacherId, courseId) {
+  const at = now();
+  return Boolean(
+    db
+      .prepare(
+        "SELECT 1 FROM course_teachers WHERE course_id=? AND teacher_id=? AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>=?)",
+      )
+      .get(courseId, teacherId, at, at),
+  );
+}
 export function canManageCourse(user, id) {
   if (typeof id !== "string" || !id) return false;
   const c = db
@@ -54,7 +65,8 @@ export function canManageCourse(user, id) {
   return Boolean(
     c &&
     (user.role === "admin" ||
-      (user.role === "teacher" && c.teacher_id === user.id)),
+      (user.role === "teacher" &&
+        (c.teacher_id === user.id || isCoTeacher(user.id, id)))),
   );
 }
 export function canAccessCourse(user, id) {
@@ -385,9 +397,10 @@ export function registerAuthRoutes(app) {
                   .get(u.id, c.id)
               : db
                   .prepare(
-                    "SELECT 1 FROM assignments WHERE teacher_id=? AND class_id=?",
+                    `SELECT 1 FROM assignments WHERE teacher_id=? AND class_id=?
+                     UNION SELECT 1 FROM course_teachers t JOIN courses k ON k.id=t.course_id WHERE t.teacher_id=? AND k.class_id=?`,
                   )
-                  .get(u.id, c.id))),
+                  .get(u.id, c.id, u.id, c.id))),
       );
     const documents = db
       .prepare(
