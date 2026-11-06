@@ -513,6 +513,9 @@ export function registerAuthRoutes(app) {
         classId,
       );
       db.prepare(
+        "DELETE FROM group_members WHERE user_id=? AND group_id IN (SELECT id FROM study_groups WHERE class_id=?)",
+      ).run(userId, classId);
+      db.prepare(
         "UPDATE delegations SET revoked_at=? WHERE student_id=? AND course_id IN (SELECT id FROM courses WHERE class_id=?) AND revoked_at IS NULL",
       ).run(now(), userId, classId);
       res.json({ ok: true });

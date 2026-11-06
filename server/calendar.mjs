@@ -100,12 +100,10 @@ export function registerCalendarRoutes(app) {
       !label ||
       !["rest", "info"].includes(kind)
     )
-      return res
-        .status(400)
-        .json({
-          error:
-            "Dates, libellé et type (jour sans travail ou information) requis.",
-        });
+      return res.status(400).json({
+        error:
+          "Dates, libellé et type (jour sans travail ou information) requis.",
+      });
     const id = uid();
     db.prepare("INSERT INTO school_calendar VALUES (?,?,?,?,?,?,?,?)").run(
       id,

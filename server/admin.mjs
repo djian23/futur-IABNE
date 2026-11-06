@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { db, uid, now, DATA_DIR } from "./db.mjs";
 import { requireAuth } from "./auth.mjs";
+import { releaseGroupsOf } from "./groups.mjs";
 import {
   UNUSABLE_PASSWORD_HASH,
   activationCode,
@@ -11,6 +12,21 @@ import {
 } from "./passwords.mjs";
 import { newTotpSecret, otpauthUrl, verifyTotp } from "./totp.mjs";
 
+// Un élève qui quitte une classe quitte aussi les groupes de travail de cette classe.
+function leaveClassGroups(userId, classId) {
+  db.prepare(
+    "DELETE FROM group_members WHERE user_id=? AND group_id IN (SELECT id FROM study_groups WHERE class_id=?)",
+  ).run(userId, classId);
+  db.prepare(
+    "DELETE FROM group_invitations WHERE invitee_id=? AND group_id IN (SELECT id FROM study_groups WHERE class_id=?)",
+  ).run(userId, classId);
+}
+const archiveClassGroups = (classId) =>
+  db
+    .prepare(
+      "UPDATE study_groups SET archived_at=? WHERE class_id=? AND archived_at IS NULL",
+    )
+    .run(now(), classId);
 const text = (value, max = 160) =>
   typeof value === "string" &&
   value.trim().length > 0 &&
@@ -385,6 +401,7 @@ export async function eraseUser(userId) {
   try {
     db.exec("PRAGMA defer_foreign_keys=ON");
     // Documents déposés par l'utilisateur (délégué) : fragments, versions et vues suivent.
+    releaseGroupsOf(userId);
     db.prepare("DELETE FROM documents WHERE uploaded_by=?").run(userId);
     for (const table of userScopedTables())
       db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(userId);
@@ -978,6 +995,7 @@ export function registerAdminRoutes(app) {
     db.prepare(
       "INSERT INTO classes_meta(class_id,archived_at) VALUES (?,?) ON CONFLICT(class_id) DO UPDATE SET archived_at=excluded.archived_at",
     ).run(klass.id, archive ? now() : null);
+    if (archive) archiveClassGroups(klass.id);
     if (archive)
       db.prepare(
         "UPDATE delegations SET revoked_at=? WHERE revoked_at IS NULL AND course_id IN (SELECT id FROM courses WHERE class_id=?)",
@@ -1090,6 +1108,7 @@ export function registerAdminRoutes(app) {
       db.prepare(
         "UPDATE delegations SET revoked_at=? WHERE student_id=? AND revoked_at IS NULL AND course_id IN (SELECT id FROM courses WHERE class_id=?)",
       ).run(now(), student.id, from.id);
+      leaveClassGroups(student.id, from.id);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -1182,6 +1201,7 @@ export function registerAdminRoutes(app) {
             `DELETE FROM memberships WHERE class_id=? AND user_id NOT IN (${r.repeaters.map(() => "?").join(",")})`,
           ).run(r.from.id, ...r.repeaters);
         }
+        archiveClassGroups(r.from.id);
         db.prepare(
           "UPDATE delegations SET revoked_at=? WHERE revoked_at IS NULL AND course_id IN (SELECT id FROM courses WHERE class_id=?)",
         ).run(now(), r.from.id);

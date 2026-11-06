@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { db } from "./db.mjs";
 import { registerAuthRoutes } from "./auth.mjs";
 import { registerAdminRoutes } from "./admin.mjs";
+import { registerGroupRoutes } from "./groups.mjs";
 import { registerDocumentRoutes } from "./documents.mjs";
 import { registerLearningRoutes } from "./learning.mjs";
 import { registerEcoleDirecteRoutes } from "./ecoledirecte.mjs";
@@ -160,6 +161,7 @@ registerAuthRoutes(app);
 registerAdminRoutes(app);
 registerDocumentRoutes(app);
 registerLearningRoutes(app);
+registerGroupRoutes(app);
 registerEcoleDirecteRoutes(app);
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Route introuvable." }),
