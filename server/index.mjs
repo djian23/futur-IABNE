@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "./db.mjs";
 import { registerAuthRoutes } from "./auth.mjs";
+import { registerAdminRoutes } from "./admin.mjs";
 import { registerDocumentRoutes } from "./documents.mjs";
 import { registerLearningRoutes } from "./learning.mjs";
 import { registerEcoleDirecteRoutes } from "./ecoledirecte.mjs";
@@ -126,11 +127,13 @@ app.use(
     store: new SQLiteStore(),
     resave: false,
     saveUninitialized: false,
+    // Déconnexion après 2 h d'inactivité (postes partagés du CDI) ; la session se renouvelle à chaque requête.
+    rolling: true,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
       secure: production || process.env.COOKIE_SECURE === "true",
-      maxAge: 8 * 3600000,
+      maxAge: 2 * 3600000,
     },
   }),
 );
@@ -154,6 +157,7 @@ const cleanup = setInterval(
 cleanup.unref();
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 registerAuthRoutes(app);
+registerAdminRoutes(app);
 registerDocumentRoutes(app);
 registerLearningRoutes(app);
 registerEcoleDirecteRoutes(app);

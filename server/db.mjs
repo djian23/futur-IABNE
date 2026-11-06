@@ -28,6 +28,12 @@ CREATE INDEX IF NOT EXISTS idx_delegations_student ON delegations(student_id,cou
 CREATE TABLE IF NOT EXISTS sessions(sid TEXT PRIMARY KEY,data TEXT NOT NULL,expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS document_views(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),school_id TEXT NOT NULL REFERENCES schools(id),document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,course_id TEXT NOT NULL REFERENCES courses(id),created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS document_versions(id TEXT PRIMARY KEY,document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,storage_name TEXT NOT NULL,original_name TEXT NOT NULL,size_bytes INTEGER NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS user_extras(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,school_id TEXT NOT NULL,login_id TEXT COLLATE NOCASE,external_id TEXT,must_change_password INTEGER NOT NULL DEFAULT 0,activation_hash TEXT,activation_expires TEXT,last_login_at TEXT,totp_secret TEXT,totp_enabled INTEGER NOT NULL DEFAULT 0);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_login_id ON user_extras(login_id) WHERE login_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_external_id ON user_extras(school_id,external_id) WHERE external_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS audit_log(id TEXT PRIMARY KEY,school_id TEXT NOT NULL,actor_id TEXT NOT NULL,action TEXT NOT NULL,target_type TEXT,target_id TEXT,details TEXT,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_audit_school ON audit_log(school_id,created_at);
+CREATE TABLE IF NOT EXISTS classes_meta(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,kind TEXT NOT NULL DEFAULT 'class' CHECK(kind IN ('class','group')),archived_at TEXT);
 `);
 
 if (process.env.SEED_DEMO === "true") {
