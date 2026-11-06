@@ -37,7 +37,7 @@ export function teacherTutorProfile(user, courseId) {
     )
     .get(courseId, user.school_id, course.teacher_id);
   const canEdit = user.role === "teacher" && user.id === course.teacher_id,
-    staff = canEdit || user.role === "admin";
+    staff = canEdit;
   const sources = parse(row?.sources, []),
     stale = Boolean(row && !sourcesCurrent(sources, courseId, user.school_id));
   const visible = staff || Boolean(row?.approved && !stale);

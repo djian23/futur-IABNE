@@ -6,7 +6,7 @@ Le [détail des fonctionnalités et limites](docs/FEATURES.md) distingue le code
 
 Le [tuteur personnel](docs/TUTOR.md) combine les méthodes validées de chaque professeur avec la mémoire privée de chaque élève : erreurs, exercices, devoirs et temps de révision. Il accompagne les tentatives étape par étape et conserve des pistes pédagogiques confirmables, sans mélanger les profils.
 
-Documents complémentaires : [administration](docs/ADMINISTRATION.md) (comptes, import, passage d’année, RGPD, audit), [groupes de travail](docs/GROUPES.md), [calendrier, Chabbat et fêtes](docs/CALENDRIER.md), [sécurité des mineurs](docs/SECURITE_MINEURS.md), [documents de conformité en brouillon](docs/conformite/README.md) et la [recherche de cas d’usage](docs/recherche/SYNTHESE.md) qui a guidé ces évolutions.
+Documents complémentaires : [rôles et droits d’accès](docs/ROLES.md) (qui accède à quoi, et pourquoi), [administration](docs/ADMINISTRATION.md) (comptes, import, passage d’année, RGPD, audit), [groupes de travail](docs/GROUPES.md), [calendrier, Chabbat et fêtes](docs/CALENDRIER.md), [sécurité des mineurs](docs/SECURITE_MINEURS.md), [documents de conformité en brouillon](docs/conformite/README.md) et la [recherche de cas d’usage](docs/recherche/SYNTHESE.md) qui a guidé ces évolutions.
 
 Le [catalogue des usages IA](docs/USAGES_IA.md) décrit les parcours livrés : atelier professeur, différenciation, remédiation collective et agent de préparation de sujets avec indices, corrigés et exports séparés.
 

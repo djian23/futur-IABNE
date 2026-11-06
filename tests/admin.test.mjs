@@ -904,3 +904,160 @@ test("co-enseignant et remplaçant : droits limités à leur fenêtre de dates",
     403,
   );
 });
+
+test("rôles : la direction et l’administration ne lisent aucun contenu de cours", async () => {
+  insertTeacherDocument();
+  const boot = await admin("/api/bootstrap");
+  assert.equal(boot.response.status, 200);
+  assert.ok(
+    boot.data.courses.length >= 1,
+    "La structure (liste des cours) reste visible",
+  );
+  assert.equal(boot.data.documents.length, 0, "Aucun document de cours");
+  assert.equal(boot.data.chapters.length, 0);
+  for (const [route, method, body] of [
+    ["/api/documents/doc-roles/preview", "GET"],
+    ["/api/documents/doc-roles/download", "GET"],
+    ["/api/courses/course-demo/search?q=confidentiel", "GET"],
+    ["/api/documents/doc-roles/versions", "GET"],
+    ["/api/stats", "GET"],
+    ["/api/reports", "GET"],
+    ["/api/ai/history?courseId=course-demo", "GET"],
+    [
+      "/api/ai/chat",
+      "POST",
+      { courseId: "course-demo", question: "Que contient le cours ?" },
+    ],
+    ["/api/ai/generate", "POST", { courseId: "course-demo", kind: "sheet" }],
+    ["/api/quizzes", "POST", { courseId: "course-demo" }],
+    ["/api/agents/practice", "POST", { courseId: "course-demo" }],
+    ["/api/chapters", "POST", { course_id: "course-demo", title: "Intrus" }],
+    ["/api/tutor/exercises", "GET"],
+  ]) {
+    const r = await admin(route, method, body);
+    assert.ok(
+      [400, 401, 403, 404].includes(r.response.status),
+      `${method} ${route} → ${r.response.status}`,
+    );
+  }
+  const settings = await admin("/api/courses/course-demo/ai-settings");
+  assert.equal(settings.response.status, 404);
+  const put = await admin("/api/courses/course-demo/ai-settings", "PUT", {
+    ai_enabled: false,
+  });
+  assert.equal(put.response.status, 403);
+  const status = await admin("/api/documents/doc-roles", "PATCH", {
+    status: "archived",
+  });
+  assert.ok([403, 404].includes(status.response.status));
+  assert.equal(
+    fixtureDb.prepare("SELECT status FROM documents WHERE id='doc-roles'").get()
+      .status,
+    "published",
+  );
+  const caps = await admin("/api/ai/capabilities");
+  assert.deepEqual(
+    caps.data.recipes,
+    [],
+    "Aucun outil IA pédagogique pour l’administration",
+  );
+});
+
+function insertTeacherDocument() {
+  const ts = "2030-01-01T12:00:00.000Z";
+  fixtureDb
+    .prepare(
+      `INSERT OR IGNORE INTO documents (id,school_id,course_id,chapter_id,uploaded_by,title,kind,status,original_name,mime_type,storage_name,size_bytes,extracted_text,extraction_status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      "doc-roles",
+      "school-demo",
+      "course-demo",
+      "chapter-demo",
+      "teacher-demo",
+      "Cours confidentiel",
+      "lesson",
+      "published",
+      "c.txt",
+      "text/plain",
+      "c.txt",
+      10,
+      "texte confidentiel",
+      "ready",
+      ts,
+      ts,
+    );
+}
+
+test("pilotage : agrégats seulement, sans nom d’élève ni de professeur, activité masquée sous 5 élèves", async () => {
+  const r = await admin("/api/admin/pilotage");
+  assert.equal(r.response.status, 200, JSON.stringify(r.data));
+  assert.ok(r.data.totals.students >= 2);
+  assert.equal(r.data.weekly.length, 8);
+  assert.ok(Array.isArray(r.data.classes));
+  const small = r.data.classes.find((c) => c.students > 0 && c.students < 5);
+  assert.ok(small?.activityHidden, "Activité masquée pour une petite classe");
+  assert.equal(small.aiRequests30d, undefined);
+  const dump = JSON.stringify(r.data);
+  for (const forbidden of [
+    "Alex Dupont",
+    "Lou Moreau",
+    "Sarah Bernard",
+    "eleve@demo.local",
+    "prof@demo.local",
+    "teacher-demo",
+  ])
+    assert.ok(!dump.includes(forbidden), forbidden);
+  assert.ok(
+    r.data.coursesWithoutContent.every(
+      (c) => c.class_name && c.subject && !("teacher" in c),
+    ),
+  );
+  assert.match(r.data.privacy, /Agrégats/);
+  for (const name of ["teacher", "student"])
+    assert.equal((await as(name, "/api/admin/pilotage")).response.status, 403);
+  // Une classe de 5 élèves ou plus affiche son activité.
+  const klass = await admin("/api/admin/classes", "POST", {
+    name: uniq("Pilote "),
+    level: "Seconde",
+  });
+  for (let i = 0; i < 5; i++)
+    await admin("/api/admin/users", "POST", {
+      name: `Pilote Élève ${i}`,
+      role: "student",
+      class_id: klass.data.class.id,
+    });
+  const again = await admin("/api/admin/pilotage");
+  const big = again.data.classes.find((c) => c.id === klass.data.class.id);
+  assert.equal(big.students, 5);
+  assert.equal(big.activityHidden, undefined);
+  assert.equal(big.activeStudents7d, 0);
+  assert.equal(big.pendingActivation, 5);
+});
+
+test("rôles : le professeur gère ses cours mais pas la structure ni les comptes", async () => {
+  for (const [route, method] of [
+    ["/api/admin/users", "POST"],
+    ["/api/admin/classes", "POST"],
+    ["/api/admin/years/rollover", "POST"],
+    ["/api/admin/pilotage", "GET"],
+    ["/api/admin/audit", "GET"],
+  ])
+    assert.equal(
+      (
+        await as("teacher", route, {
+          method,
+          body: method === "POST" ? {} : undefined,
+        })
+      ).response.status,
+      403,
+      route,
+    );
+  const chapter = await as("teacher", "/api/chapters", {
+    method: "POST",
+    body: { course_id: "course-demo", title: uniq("Chap ") },
+  });
+  assert.equal(chapter.response.status, 201);
+  const ai = await as("teacher", "/api/ai/capabilities");
+  assert.ok(ai.data.recipes.length > 0);
+});

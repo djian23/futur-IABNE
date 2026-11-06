@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { api, post } from "./api";
 import { Form, Field, Select } from "./ui";
-import Administration from "./Admin";
+import Administration, { Pilotage } from "./Admin";
 import { CourseAiSettings, Reports } from "./TeacherControls";
 import Groups from "./Groups";
 import StudyContent from "./StudyContent";
@@ -239,29 +239,38 @@ function App() {
     role = user.role,
     admin = role === "admin",
     teacher = ["teacher", "professor"].includes(role),
-    staff = admin || teacher;
+    // La direction pilote (comptes, structure, vision globale) ; les contenus de cours sont aux professeurs.
+    staff = teacher;
   const courses = data.courses || [],
     documents = data.documents || [],
     chapters = data.chapters || [],
     classes = data.classes || [],
     delegations = data.delegations || [];
-  const nav = [
-    ["dashboard", "Vue d’ensemble", LayoutDashboard],
-    ["courses", "Mes cours", BookOpen],
-    ["assistant", "Assistant pédagogique", Sparkles],
-    ["quizzes", "Entraînement", GraduationCap],
-    ["library", staff ? "Atelier IA" : "Mes révisions", FileText],
-    ["planning", "Mon organisation", CalendarDays],
-    ["groups", "Groupes de travail", UsersRound],
-    ["account", "Mon compte", Settings],
-    ...(staff
-      ? [
-          ["statistics", "Suivi pédagogique", ChartNoAxesCombined],
-          ["reports", "Signalements", AlertCircle],
-        ]
-      : []),
-    ...(admin ? [["administration", "Administration", Users]] : []),
-  ];
+  const nav = admin
+    ? [
+        ["dashboard", "Pilotage de l’établissement", LayoutDashboard],
+        ["administration", "Administration", Users],
+        ["groups", "Groupes de travail", UsersRound],
+        ["account", "Mon compte", Settings],
+      ]
+    : [
+        ["dashboard", "Vue d’ensemble", LayoutDashboard],
+        ["courses", "Mes cours", BookOpen],
+        ["assistant", "Assistant pédagogique", Sparkles],
+        ["quizzes", "Entraînement", GraduationCap],
+        ["library", staff ? "Atelier IA" : "Mes révisions", FileText],
+        ["planning", "Mon organisation", CalendarDays],
+        ["groups", "Groupes de travail", UsersRound],
+        ["account", "Mon compte", Settings],
+        ...(staff
+          ? [
+              ["statistics", "Suivi pédagogique", ChartNoAxesCombined],
+              ["reports", "Signalements", AlertCircle],
+            ]
+          : []),
+      ];
+  // Une page interdite au profil (adresse #courses d'un compte d'administration…) revient à l'accueil.
+  const current = nav.some(([key]) => key === view) ? view : "dashboard";
   function navigate(key) {
     if (key !== "assistant") setPendingExercise(null);
     if (window.location.hash !== `#${key}`)
@@ -301,12 +310,12 @@ function App() {
           {nav.map(([key, text, Icon]) => (
             <button
               key={key}
-              className={view === key ? "nav-item active" : "nav-item"}
+              className={current === key ? "nav-item active" : "nav-item"}
               onClick={() => navigate(key)}
             >
               <Icon size={19} />
               {text}
-              {view === key && <span className="nav-dot" />}
+              {current === key && <span className="nav-dot" />}
             </button>
           ))}
         </nav>
@@ -353,7 +362,7 @@ function App() {
           </button>
           <span className="breadcrumb">
             Mon espace <ChevronRight size={14} />
-            <strong>{nav.find((n) => n[0] === view)?.[1]}</strong>
+            <strong>{nav.find((n) => n[0] === current)?.[1]}</strong>
           </span>
           <div className="header-right">
             <span className="secure">
@@ -381,20 +390,22 @@ function App() {
             <div>
               <div className="eyebrow">L'ENVIE D'APPRENDRE, ENSEMBLE</div>
               <h1>
-                {view === "dashboard"
-                  ? `Bonjour ${user.name?.split(" ")[0] || ""} ${staff ? "" : "☀"}`
-                  : nav.find((n) => n[0] === view)?.[1]}
+                {current === "dashboard"
+                  ? `Bonjour ${user.name?.split(" ")[0] || ""} ${role === "student" ? "☀" : ""}`
+                  : nav.find((n) => n[0] === current)?.[1]}
               </h1>
               <p className="muted">
-                {view === "dashboard"
-                  ? "Votre parcours IABNE : comprendre, pratiquer et progresser."
-                  : view === "groups"
+                {current === "dashboard"
+                  ? admin
+                    ? "Une vision globale de l’établissement, sans accès aux contenus des cours ni aux conversations."
+                    : "Votre parcours IABNE : comprendre, pratiquer et progresser."
+                  : current === "groups"
                     ? "Réviser et préparer des projets ensemble, dans un cadre sûr."
-                    : view === "courses"
+                    : current === "courses"
                       ? "Retrouvez les ressources partagées dans votre établissement."
-                      : view === "assistant"
+                      : current === "assistant"
                         ? "Comprendre vos cours, une question à la fois."
-                        : view === "planning"
+                        : current === "planning"
                           ? "Un peu chaque jour, pour avancer sereinement."
                           : "Votre espace pour apprendre et faire apprendre."}
               </p>
@@ -422,7 +433,10 @@ function App() {
               {notice}
             </div>
           )}
-          {view === "dashboard" && (
+          {current === "dashboard" && admin && (
+            <Pilotage onNavigate={navigate} />
+          )}
+          {current === "dashboard" && !admin && (
             <>
               <div className="hero">
                 <div>
@@ -546,7 +560,7 @@ function App() {
               </div>
             </>
           )}
-          {view === "courses" && (
+          {current === "courses" && (
             <Courses
               {...{
                 courses,
@@ -568,7 +582,7 @@ function App() {
               }}
             />
           )}
-          {view === "assistant" && (
+          {current === "assistant" && (
             <Assistant
               courses={courses}
               selected={selectedCourse}
@@ -582,10 +596,10 @@ function App() {
               personal={user.role === "student"}
             />
           )}
-          {view === "quizzes" && (
+          {current === "quizzes" && (
             <Quizzes courses={courses} chapters={chapters} />
           )}
-          {view === "library" && (
+          {current === "library" && (
             <Library
               initialPractice={pendingPractice}
               courses={courses}
@@ -594,12 +608,12 @@ function App() {
               user={user}
             />
           )}
-          {view === "planning" && <Planning act={act} />}
-          {view === "account" && <Account user={user} />}
-          {view === "groups" && <Groups user={user} data={data} />}
-          {view === "statistics" && <Statistics />}
-          {view === "reports" && staff && <Reports />}
-          {view === "administration" && admin && (
+          {current === "planning" && <Planning act={act} />}
+          {current === "account" && <Account user={user} />}
+          {current === "groups" && <Groups user={user} data={data} />}
+          {current === "statistics" && <Statistics />}
+          {current === "reports" && staff && <Reports />}
+          {current === "administration" && admin && (
             <Administration data={data} act={act} busy={busy} />
           )}
           <footer>

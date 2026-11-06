@@ -510,6 +510,171 @@ export function registerAdminRoutes(app) {
     });
   });
 
+  // Vision globale de pilotage : agrégats uniquement. Jamais de nom d'élève, jamais de nom de
+  // professeur, jamais de contenu de cours ni de conversation. Les chiffres d'activité d'une classe
+  // ne s'affichent qu'à partir de 5 élèves.
+  app.get("/api/admin/pilotage", ...guard, (req, res) => {
+    const sid = req.user.school_id;
+    const iso = (days) => new Date(Date.now() - days * 86400000).toISOString();
+    const week = iso(7),
+      month = iso(30);
+    const one = (sql, ...p) => db.prepare(sql).get(...p).n;
+    const activeIds = (since) =>
+      new Set(
+        db
+          .prepare(
+            `SELECT DISTINCT l.user_id FROM learning_usage l WHERE l.created_at>=?
+             UNION SELECT user_id FROM user_extras WHERE school_id=? AND last_login_at>=?
+             UNION SELECT user_id FROM learning_quiz_answers WHERE created_at>=?`,
+          )
+          .all(since, sid, since, since)
+          .map((r) => r.user_id),
+      );
+    const activeWeek = activeIds(week);
+    const classes = db
+      .prepare(
+        `SELECT c.id,c.name,c.level,COALESCE(m.kind,'class') AS kind FROM classes c
+         LEFT JOIN classes_meta m ON m.class_id=c.id
+         WHERE c.school_id=? AND m.archived_at IS NULL ORDER BY c.level,c.name`,
+      )
+      .all(sid)
+      .map((c) => {
+        const students = db
+          .prepare(
+            "SELECT m.user_id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.class_id=? AND u.role='student' AND u.active=1",
+          )
+          .all(c.id)
+          .map((r) => r.user_id);
+        const courses = db
+          .prepare("SELECT id FROM courses WHERE class_id=?")
+          .all(c.id)
+          .map((r) => r.id);
+        const publishedCourses = courses.filter(
+          (id) =>
+            one(
+              "SELECT COUNT(*) n FROM documents WHERE course_id=? AND status='published'",
+              id,
+            ) > 0,
+        ).length;
+        const row = {
+          id: c.id,
+          name: c.name,
+          level: c.level,
+          kind: c.kind,
+          students: students.length,
+          courses: courses.length,
+          coursesWithContent: publishedCourses,
+          pendingActivation: students.filter((id) =>
+            db
+              .prepare(
+                "SELECT 1 FROM user_extras WHERE user_id=? AND activation_hash IS NOT NULL",
+              )
+              .get(id),
+          ).length,
+        };
+        if (students.length >= 5) {
+          const marks = students.map(() => "?").join(",");
+          row.activeStudents7d = students.filter((id) =>
+            activeWeek.has(id),
+          ).length;
+          row.aiRequests30d = one(
+            `SELECT COUNT(*) n FROM learning_usage WHERE created_at>=? AND user_id IN (${marks})`,
+            month,
+            ...students,
+          );
+          row.quizAnswers30d = one(
+            `SELECT COUNT(*) n FROM learning_quiz_answers WHERE created_at>=? AND user_id IN (${marks})`,
+            month,
+            ...students,
+          );
+        } else row.activityHidden = true;
+        return row;
+      });
+    // Série hebdomadaire : élèves ayant utilisé l'assistant ou répondu à un quiz.
+    const weekly = [];
+    for (let n = 7; n >= 0; n--) {
+      const from = iso((n + 1) * 7),
+        to = iso(n * 7);
+      const users = db
+        .prepare(
+          `SELECT COUNT(*) n FROM (
+             SELECT l.user_id FROM learning_usage l JOIN users u ON u.id=l.user_id
+              WHERE u.school_id=? AND u.role='student' AND l.created_at>=? AND l.created_at<?
+             UNION SELECT a.user_id FROM learning_quiz_answers a JOIN users u ON u.id=a.user_id
+              WHERE u.school_id=? AND a.created_at>=? AND a.created_at<?)`,
+        )
+        .get(sid, from, to, sid, from, to).n;
+      weekly.push({ weekStart: from.slice(0, 10), activeStudents: users });
+    }
+    const uncovered = db
+      .prepare(
+        `SELECT c.name AS class_name,s.name AS subject
+         FROM courses k JOIN classes c ON c.id=k.class_id JOIN subjects s ON s.id=k.subject_id
+         LEFT JOIN classes_meta m ON m.class_id=c.id
+         WHERE k.school_id=? AND m.archived_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.course_id=k.id AND d.status='published')
+         ORDER BY c.name,s.name`,
+      )
+      .all(sid);
+    const students = one(
+      "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='student' AND active=1",
+      sid,
+    );
+    res.json({
+      generatedAt: now(),
+      totals: {
+        students,
+        teachers: one(
+          "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher' AND active=1",
+          sid,
+        ),
+        activeStudents7d: [...activeWeek].filter((id) =>
+          db
+            .prepare(
+              "SELECT 1 FROM users WHERE id=? AND role='student' AND school_id=?",
+            )
+            .get(id, sid),
+        ).length,
+        publishedDocuments: one(
+          "SELECT COUNT(*) n FROM documents WHERE school_id=? AND status='published'",
+          sid,
+        ),
+        aiRequests30d: one(
+          "SELECT COUNT(*) n FROM learning_usage l JOIN users u ON u.id=l.user_id WHERE u.school_id=? AND l.created_at>=?",
+          sid,
+          month,
+        ),
+        activeGroups: one(
+          "SELECT COUNT(*) n FROM study_groups WHERE school_id=? AND archived_at IS NULL",
+          sid,
+        ),
+      },
+      attention: {
+        openSafetyAlerts: one(
+          "SELECT COUNT(*) n FROM safety_alerts WHERE school_id=? AND handled_at IS NULL",
+          sid,
+        ),
+        newAiReports: one(
+          "SELECT COUNT(*) n FROM learning_report_snapshots WHERE school_id=? AND status='new'",
+          sid,
+        ),
+        openGroupReports: one(
+          "SELECT COUNT(*) n FROM group_reports r JOIN study_groups g ON g.id=r.group_id WHERE g.school_id=? AND r.status='new'",
+          sid,
+        ),
+        studentsToActivate: one(
+          "SELECT COUNT(*) n FROM user_extras x JOIN users u ON u.id=x.user_id WHERE x.school_id=? AND u.role='student' AND x.activation_hash IS NOT NULL",
+          sid,
+        ),
+      },
+      classes,
+      weekly,
+      coursesWithoutContent: uncovered,
+      privacy:
+        "Agrégats uniquement : aucun élève, aucun professeur nommé, aucun contenu de cours ni de conversation. Activité d’une classe masquée sous 5 élèves.",
+    });
+  });
+
   app.get("/api/admin/users", ...guard, (req, res) => {
     const q = text(String(req.query.q || ""), 80);
     const where = ["u.school_id=?"],

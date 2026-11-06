@@ -127,8 +127,11 @@ export function registerTeacherControlRoutes(app) {
       .all(user.school_id)
       .filter((c) => canManageCourse(user, c.id));
   app.get("/api/reports", requireAuth, (req, res) => {
-    if (!["teacher", "admin"].includes(req.user.role))
-      return res.status(403).json({ error: "Accès réservé aux professeurs." });
+    if (req.user.role !== "teacher")
+      return res.status(403).json({
+        error:
+          "Les signalements sont lus par les professeurs des cours concernés. La direction voit seulement leur nombre.",
+      });
     const courses = visibleCourses(req.user);
     if (!courses.length) return res.json({ reports: [], newCount: 0 });
     const marks = courses.map(() => "?").join(",");

@@ -2225,3 +2225,26 @@ html.comfort small {
     display: none;
   }
 }
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 140px;
+  margin-top: 12px;
+}
+.bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 2px;
+}
+.bar {
+  width: 100%;
+  max-width: 48px;
+  min-height: 2px;
+  background: #3a6550;
+  border-radius: 6px 6px 0 0;
+}

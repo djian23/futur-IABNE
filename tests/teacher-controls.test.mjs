@@ -351,7 +351,11 @@ test("signalements : le professeur lit le texte sans identité, et l’effacemen
   const adminList = await request("/api/reports", {
     cookie: admin.response.headers.get("set-cookie").split(";")[0],
   });
-  assert.ok(adminList.data.reports.some((r) => r.id === mine.id));
+  assert.equal(
+    adminList.response.status,
+    403,
+    "La direction ne lit pas le contenu des signalements",
+  );
 });
 
 async function upload(file, name, extra = {}) {

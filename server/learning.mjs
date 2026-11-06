@@ -911,7 +911,7 @@ export function registerLearningRoutes(app) {
   });
 
   app.get("/api/stats", requireAuth, (req, res) => {
-    if (!["teacher", "admin"].includes(req.user.role))
+    if (req.user.role !== "teacher")
       return fail(res, 403, "Accès réservé aux professeurs.");
     const courses = db
       .prepare("SELECT id,title,teacher_id FROM courses WHERE school_id=?")

@@ -57,6 +57,9 @@ function isCoTeacher(teacherId, courseId) {
       .get(courseId, teacherId, at, at),
   );
 }
+// Le contenu d'un cours (documents, réglages, IA, méthode) appartient aux professeurs :
+// titulaire, co-enseignant ou remplaçant dans sa fenêtre. La direction et l'administration
+// pilotent (comptes, structure, statistiques globales) sans accéder aux contenus des cours.
 export function canManageCourse(user, id) {
   if (typeof id !== "string" || !id) return false;
   const c = db
@@ -64,9 +67,8 @@ export function canManageCourse(user, id) {
     .get(id, user.school_id);
   return Boolean(
     c &&
-    (user.role === "admin" ||
-      (user.role === "teacher" &&
-        (c.teacher_id === user.id || isCoTeacher(user.id, id)))),
+    user.role === "teacher" &&
+    (c.teacher_id === user.id || isCoTeacher(user.id, id)),
   );
 }
 export function canAccessCourse(user, id) {
@@ -376,8 +378,11 @@ export function registerAuthRoutes(app) {
     const courses = db
       .prepare("SELECT * FROM courses WHERE school_id=? ORDER BY title")
       .all(u.school_id)
-      .filter((c) => canAccessCourse(u, c.id));
-    const ids = new Set(courses.map((c) => c.id));
+      // L'administration voit la liste des cours (structure) mais jamais leur contenu.
+      .filter((c) => u.role === "admin" || canAccessCourse(u, c.id));
+    const ids = new Set(
+      courses.filter((c) => canAccessCourse(u, c.id)).map((c) => c.id),
+    );
     const classes = db
       .prepare(
         `SELECT c.*,COALESCE(m.kind,'class') AS kind,m.archived_at

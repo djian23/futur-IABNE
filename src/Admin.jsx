@@ -105,7 +105,7 @@ function LoginSheets({ accounts, onClose }) {
   );
 }
 
-function Overview() {
+function Overview({ alertsOnly = false }) {
   const [overview, setOverview] = useState(null),
     [alerts, setAlerts] = useState([]),
     [error, setError] = useState("");
@@ -161,36 +161,40 @@ function Overview() {
           ))}
         </div>
       )}
-      <div className="stats">
-        {[
-          [accounts.students, "élèves actifs"],
-          [accounts.teachers, "professeurs actifs"],
-          [accounts.pendingActivation, "comptes à activer"],
-          [accounts.neverLoggedIn, "jamais connectés"],
-          [structure.classes, "classes"],
-          [structure.publishedDocuments, "documents publiés"],
-          [ai.requestsLast7Days, "demandes IA sur 7 jours"],
-          [attention.openAiReports, "signalements de réponses IA"],
-          [
-            Math.round(
-              (ai.tokensLast30Days.input + ai.tokensLast30Days.output) / 1000,
-            ),
-            "milliers de jetons IA sur 30 jours",
-          ],
-        ].map(([value, label]) => (
-          <div className="stat" key={label}>
-            <div>
-              <strong>{value}</strong>
-              <span>{label}</span>
+      {!alertsOnly && (
+        <div className="stats">
+          {[
+            [accounts.students, "élèves actifs"],
+            [accounts.teachers, "professeurs actifs"],
+            [accounts.pendingActivation, "comptes à activer"],
+            [accounts.neverLoggedIn, "jamais connectés"],
+            [structure.classes, "classes"],
+            [structure.publishedDocuments, "documents publiés"],
+            [ai.requestsLast7Days, "demandes IA sur 7 jours"],
+            [attention.openAiReports, "signalements de réponses IA"],
+            [
+              Math.round(
+                (ai.tokensLast30Days.input + ai.tokensLast30Days.output) / 1000,
+              ),
+              "milliers de jetons IA sur 30 jours",
+            ],
+          ].map(([value, label]) => (
+            <div className="stat" key={label}>
+              <div>
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-      <p className="muted">
-        Plafond de l’établissement : {ai.hourlySchoolLimit} demandes IA par
-        heure. Ces chiffres sont des compteurs globaux ; aucune conversation
-        n’est consultable ici.
-      </p>
+          ))}
+        </div>
+      )}
+      {!alertsOnly && (
+        <p className="muted">
+          Plafond de l’établissement : {ai.hourlySchoolLimit} demandes IA par
+          heure. Ces chiffres sont des compteurs globaux ; aucune conversation
+          n’est consultable ici.
+        </p>
+      )}
     </>
   );
 }
@@ -1330,6 +1334,146 @@ function TwoFactor({ user }) {
         </Form>
       )}
     </div>
+  );
+}
+
+export function Pilotage({ onNavigate }) {
+  const [data, setData] = useState(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    api("/api/admin/pilotage")
+      .then(setData)
+      .catch((e) => setError(e.message));
+  }, []);
+  if (error) return <div className="alert error">{error}</div>;
+  if (!data) return <p className="muted">Chargement…</p>;
+  const { totals, attention, classes, weekly, coursesWithoutContent } = data;
+  const maxWeekly = Math.max(1, ...weekly.map((w) => w.activeStudents));
+  const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+  return (
+    <>
+      <Overview alertsOnly />
+      <div className="stats" style={{ marginTop: 20 }}>
+        {[
+          [
+            `${pct(totals.activeStudents7d, totals.students)} %`,
+            `élèves actifs sur 7 jours (${totals.activeStudents7d}/${totals.students})`,
+          ],
+          [totals.teachers, "professeurs"],
+          [totals.publishedDocuments, "documents de cours publiés"],
+          [totals.aiRequests30d, "questions à l’assistant sur 30 jours"],
+          [totals.activeGroups, "groupes de travail actifs"],
+          [attention.studentsToActivate, "élèves à activer"],
+          [attention.newAiReports, "réponses IA signalées à relire"],
+          [attention.openGroupReports, "signalements de groupes ouverts"],
+        ].map(([value, label]) => (
+          <div className="stat" key={label}>
+            <div>
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="panel">
+        <h3>Élèves actifs avec l’assistant, par semaine</h3>
+        <p className="muted">
+          Élèves ayant posé une question ou répondu à un quiz.
+        </p>
+        <div
+          className="bars"
+          role="img"
+          aria-label={weekly
+            .map(
+              (w) => `semaine du ${w.weekStart} : ${w.activeStudents} élèves`,
+            )
+            .join(" ; ")}
+        >
+          {weekly.map((w) => (
+            <div className="bar-col" key={w.weekStart}>
+              <div
+                className="bar"
+                style={{
+                  height: `${Math.round((100 * w.activeStudents) / maxWeekly)}%`,
+                }}
+                title={`${w.activeStudents} élèves`}
+              />
+              <small>{w.weekStart.slice(5)}</small>
+              <small>{w.activeStudents}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="panel">
+        <h3>Par classe</h3>
+        <p className="muted">
+          L’activité d’une classe n’est affichée qu’à partir de 5 élèves. Aucun
+          élève ni aucun professeur n’est nommé.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Classe</th>
+                <th>Élèves</th>
+                <th>À activer</th>
+                <th>Actifs 7 j</th>
+                <th>Questions IA 30 j</th>
+                <th>Quiz 30 j</th>
+                <th>Cours avec contenu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {classes.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    {c.name}{" "}
+                    <small>{c.kind === "group" ? "(groupe)" : ""}</small>
+                  </td>
+                  <td>{c.students}</td>
+                  <td>{c.pendingActivation}</td>
+                  <td>
+                    {c.activityHidden
+                      ? "—"
+                      : `${pct(c.activeStudents7d, c.students)} %`}
+                  </td>
+                  <td>{c.activityHidden ? "—" : c.aiRequests30d}</td>
+                  <td>{c.activityHidden ? "—" : c.quizAnswers30d}</td>
+                  <td>
+                    {c.coursesWithContent}/{c.courses}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {coursesWithoutContent.length > 0 && (
+        <div className="panel">
+          <h3>Matières sans document publié</h3>
+          <p className="muted">
+            À accompagner (formation, import) : sans documents, l’assistant ne
+            peut rien répondre pour ces cours. Ce n’est pas une évaluation des
+            professeurs.
+          </p>
+          <p>
+            {coursesWithoutContent
+              .map((c) => `${c.class_name} · ${c.subject}`)
+              .join(" ; ")}
+          </p>
+        </div>
+      )}
+      {onNavigate && (
+        <p>
+          <button
+            className="text-button"
+            onClick={() => onNavigate("administration")}
+          >
+            Aller à l’administration (comptes, classes, import) →
+          </button>
+        </p>
+      )}
+    </>
   );
 }
 
