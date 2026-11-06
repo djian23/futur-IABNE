@@ -62,6 +62,24 @@ test("provisionnement, sauvegarde et restauration conservent comptes et fichiers
       0,
       "Ne doit pas écraser une installation existante.",
     );
+    const beforeHash = user[0].password_hash;
+    const again = spawnSync(
+      process.execPath,
+      ["scripts/provision.mjs", "--if-empty"],
+      {
+        cwd: process.cwd(),
+        env: { ...env, PROVISION_ADMIN_PASSWORD: "" },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(again.status, 0, again.stderr);
+    db = new DatabaseSync(path.join(data, "school.sqlite"));
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM users").get().n, 1);
+    assert.equal(
+      db.prepare("SELECT password_hash FROM users").get().password_hash,
+      beforeHash,
+    );
+    db.close();
     const saved = run("scripts/backup.mjs");
     assert.equal(saved.status, 0, saved.stderr);
     assert.ok(existsSync(path.join(backup, "manifest.json")));
@@ -94,5 +112,45 @@ test("provisionnement, sauvegarde et restauration conservent comptes et fichiers
     assert.ok(!existsSync(env.RESTORE_DIR), "Vérifier avant toute copie.");
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("initialisation automatique opt-in : base vide, secret obligatoire et création unique", () => {
+  const data = mkdtempSync(path.join(tmpdir(), "iabne-startup-"));
+  const env = {
+    ...process.env,
+    DATA_DIR: data,
+    NODE_ENV: "production",
+    SEED_DEMO: "false",
+    PROVISION_SCHOOL_NAME: "Yabné test",
+    PROVISION_ADMIN_NAME: "Admin test",
+    PROVISION_ADMIN_EMAIL: "admin@test.invalid",
+    PROVISION_ADMIN_PASSWORD: "",
+  };
+  const run = () =>
+    spawnSync(process.execPath, ["scripts/provision.mjs", "--if-empty"], {
+      cwd: process.cwd(),
+      env,
+      encoding: "utf8",
+    });
+  try {
+    assert.notEqual(run().status, 0);
+    env.PROVISION_ADMIN_PASSWORD = "SyntheticPrivateStartupPassword2026!";
+    const first = run();
+    assert.equal(first.status, 0, first.stderr);
+    assert.ok(!first.stdout.includes(env.PROVISION_ADMIN_PASSWORD));
+    const db = new DatabaseSync(path.join(data, "school.sqlite"));
+    const original = db.prepare("SELECT * FROM users").get();
+    assert.equal(original.email, "admin@test.invalid");
+    assert.equal(original.role, "admin");
+    env.PROVISION_ADMIN_PASSWORD = "DifferentSyntheticPassword2026!";
+    assert.equal(run().status, 0);
+    assert.equal(
+      db.prepare("SELECT password_hash FROM users").get().password_hash,
+      original.password_hash,
+    );
+    db.close();
+  } finally {
+    rmSync(data, { recursive: true, force: true });
   }
 });

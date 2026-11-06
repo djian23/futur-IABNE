@@ -39,6 +39,9 @@ Railway ne règle pas à lui seul les exigences de géographie, de contrat et de
 
 ### Premier administrateur sur Railway
 
+Pour éviter le terminal Railway, définir `PROVISION_ON_START=true` et `PROVISION_ADMIN_PASSWORD` (16 à 128 caractères), puis redéployer. Le démarrage utilise par défaut l’établissement « Yabné Paris », le nom « Administrateur IABNE » et l’identifiant `admin@iabne.local`. Les variables ci-dessous permettent de personnaliser ces valeurs. Le point d’entrée Docker crée l’administrateur uniquement si la base ne contient aucun utilisateur. Les redémarrages suivants ne changent aucun compte ni mot de passe, même si les variables ont changé. Après création, retirer le mot de passe des variables et remettre `PROVISION_ON_START=false`. Aucun identifiant public n’est inscrit dans le code. La procédure manuelle reste disponible.
+
+
 Le script `npm run provision` crée un établissement, son année scolaire et son premier administrateur dans une base sans utilisateur. Il refuse une installation déjà initialisée et refuse `SEED_DEMO=true` ; il ne réinitialise aucun mot de passe existant.
 
 Dans les paramètres sécurisés du service, fournir temporairement :

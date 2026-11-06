@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, chownSync, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -17,5 +18,23 @@ if (process.getuid?.() === 0) {
   }
   process.setgid(1000);
   process.setuid(1000);
+}
+if (process.env.PROVISION_ON_START === "true") {
+  execFileSync(
+    process.execPath,
+    [new URL("./provision.mjs", import.meta.url).pathname, "--if-empty"],
+    {
+      stdio: ["ignore", "inherit", "inherit"],
+      env: {
+        ...process.env,
+        PROVISION_SCHOOL_NAME:
+          process.env.PROVISION_SCHOOL_NAME || "Yabné Paris",
+        PROVISION_ADMIN_NAME:
+          process.env.PROVISION_ADMIN_NAME || "Administrateur IABNE",
+        PROVISION_ADMIN_EMAIL:
+          process.env.PROVISION_ADMIN_EMAIL || "admin@iabne.local",
+      },
+    },
+  );
 }
 await import("../server/index.mjs");
