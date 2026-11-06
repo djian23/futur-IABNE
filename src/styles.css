@@ -343,6 +343,8 @@ svg {
   display: flex;
   flex-direction: column;
   z-index: 30;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .logo {
   display: flex;
@@ -2079,4 +2081,147 @@ textarea {
 .imported-content {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Administration, impression des fiches, confort de lecture */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filters input,
+.filters select,
+.row-actions select {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+}
+.account-row {
+  flex-wrap: wrap;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table-wrap th,
+.table-wrap td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.table-wrap .row-error {
+  background: #fdf0ee;
+}
+.rollover-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 10px 0;
+  padding: 10px 14px;
+}
+.activation-card code,
+.login-sheet code {
+  font-size: 1.15em;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.print-area {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.login-sheet {
+  border: 1px dashed #888;
+  border-radius: 8px;
+  padding: 14px;
+  break-inside: avoid;
+}
+.comfort-toggle[aria-pressed="true"] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.header-right {
+  flex-wrap: wrap;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+/* Confort de lecture (dyslexie, fatigue visuelle) : police sans empattement, interlignage et espacement larges. */
+html.comfort body,
+html.comfort button,
+html.comfort input,
+html.comfort textarea,
+html.comfort select {
+  font-family: Verdana, "Trebuchet MS", Arial, sans-serif;
+  letter-spacing: 0.04em;
+  word-spacing: 0.12em;
+  line-height: 1.75;
+}
+html.comfort p,
+html.comfort li,
+html.comfort small {
+  max-width: 70ch;
+}
+@media (max-width: 800px) {
+  .header-right .secure,
+  .header-right .avatar.small {
+    display: none;
+  }
+  .header-right {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .header-right .text-button {
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .breadcrumb {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .breadcrumb svg {
+    display: none;
+  }
 }

@@ -26,6 +26,7 @@ export async function api(path, options = {}) {
         `La demande a échoué (${response.status}).`,
     );
     error.status = response.status;
+    error.code = data?.code;
     throw error;
   }
   return data;

@@ -27,6 +27,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { api, post } from "./api";
+import { Form, Field, Select } from "./ui";
+import Administration from "./Admin";
 import StudyContent from "./StudyContent";
 import PersonalTutor from "./PersonalTutor";
 import TeacherMethod from "./TeacherMethod";
@@ -90,18 +92,55 @@ function App() {
     [pendingExercise, setPendingExercise] = useState(null),
     [pendingPractice, setPendingPractice] = useState(null),
     [busy, setBusy] = useState(false),
+    [mustChange, setMustChange] = useState(null),
+    [comfort, setComfort] = useState(
+      () => localStorage.getItem("iabne:comfort") === "1",
+    ),
     [notice, setNotice] = useState("");
   async function refresh() {
     try {
       setData(normalizeBootstrap(await api("/api/bootstrap")));
+      setMustChange(null);
       setError("");
     } catch (e) {
-      if (e.status === 401) setData(null);
-      else setError(e.message);
+      if (e.status === 401) {
+        setData(null);
+        setMustChange(null);
+      } else if (e.code === "password_change_required") {
+        try {
+          setMustChange((await api("/api/auth/me")).user);
+        } catch {}
+      } else setError(e.message);
     } finally {
       setBooting(false);
     }
   }
+  useEffect(() => {
+    document.documentElement.classList.toggle("comfort", comfort);
+    localStorage.setItem("iabne:comfort", comfort ? "1" : "0");
+  }, [comfort]);
+  // Le bouton « retour » du navigateur ou du téléphone revient à l'écran précédent de l'application.
+  useEffect(() => {
+    const known = [
+      "dashboard",
+      "courses",
+      "assistant",
+      "quizzes",
+      "library",
+      "planning",
+      "account",
+      "statistics",
+      "administration",
+    ];
+    const fromHash = () => {
+      const key = window.location.hash.slice(1);
+      setView(known.includes(key) ? key : "dashboard");
+      setMobile(false);
+    };
+    fromHash();
+    window.addEventListener("popstate", fromHash);
+    return () => window.removeEventListener("popstate", fromHash);
+  }, []);
   useEffect(() => {
     refresh();
     window.addEventListener("iabne:refresh", refresh);
@@ -171,24 +210,19 @@ function App() {
         <p>Votre espace se prépare…</p>
       </div>
     );
-  if (!data?.user)
+  if (mustChange)
     return (
-      <Login
-        error={error}
-        onLogin={async (values) => {
-          setBusy(true);
-          try {
-            await post("/api/auth/login", values);
-            await refresh();
-          } catch (e) {
-            setError(e.message);
-          } finally {
-            setBusy(false);
-          }
+      <ForcedPassword
+        user={mustChange}
+        onDone={refresh}
+        onLogout={async () => {
+          await post("/api/auth/logout", {}).catch(() => {});
+          setMustChange(null);
+          setData(null);
         }}
-        busy={busy}
       />
     );
+  if (!data?.user) return <Login onDone={refresh} initialError={error} />;
   const user = data.user,
     role = user.role,
     admin = role === "admin",
@@ -214,6 +248,8 @@ function App() {
   ];
   function navigate(key) {
     if (key !== "assistant") setPendingExercise(null);
+    if (window.location.hash !== `#${key}`)
+      window.history.pushState(null, "", `#${key}`);
     setView(key);
     setMobile(false);
     setError("");
@@ -307,6 +343,20 @@ function App() {
             <span className="secure">
               <ShieldCheck size={15} /> Espace sécurisé
             </span>
+            <button
+              className="text-button comfort-toggle"
+              aria-pressed={comfort}
+              title="Texte plus aéré et plus lisible"
+              onClick={() => setComfort(!comfort)}
+            >
+              Aa Confort de lecture
+            </button>
+            <button
+              className="text-button"
+              onClick={() => act(() => post("/api/auth/logout", {}), "")}
+            >
+              <LogOut size={15} /> Se déconnecter
+            </button>
             <span className="avatar small">{(user.name || "U")[0]}</span>
           </div>
         </header>
@@ -529,7 +579,7 @@ function App() {
           {view === "planning" && <Planning act={act} />}
           {view === "account" && <Account user={user} />}
           {view === "statistics" && <Statistics />}
-          {view === "administration" && (
+          {view === "administration" && admin && (
             <Administration data={data} act={act} busy={busy} />
           )}
           <footer>
@@ -552,7 +602,24 @@ function Logo({ small }) {
     </div>
   );
 }
-function Login({ error, onLogin, busy }) {
+function Login({ onDone, initialError = "" }) {
+  const [mode, setMode] = useState("login"),
+    [needTotp, setNeedTotp] = useState(false),
+    [error, setError] = useState(initialError),
+    [busy, setBusy] = useState(false);
+  async function submit(path, values) {
+    setBusy(true);
+    setError("");
+    try {
+      await post(path, values);
+      await onDone();
+    } catch (e) {
+      if (e.code === "totp_required") setNeedTotp(true);
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="login-page">
       <div className="login-story">
@@ -575,118 +642,174 @@ function Login({ error, onLogin, busy }) {
       <div className="login-main">
         <div className="login-box">
           <span className="eyebrow">BIENVENUE DANS VOTRE ESPACE</span>
-          <h2>Heureux de vous retrouver.</h2>
+          <h2>
+            {mode === "login"
+              ? "Heureux de vous retrouver."
+              : "Première connexion"}
+          </h2>
           <p className="muted">
-            Connectez-vous avec le compte fourni par votre établissement.
+            {mode === "login"
+              ? "Connectez-vous avec le compte fourni par votre établissement."
+              : "Entrez l’identifiant et le code d’activation de votre fiche de connexion, puis choisissez votre mot de passe."}
           </p>
+          <div className="tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={mode === "login"}
+              className={mode === "login" ? "active" : ""}
+              onClick={() => {
+                setMode("login");
+                setError("");
+              }}
+            >
+              Se connecter
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === "activate"}
+              className={mode === "activate" ? "active" : ""}
+              onClick={() => {
+                setMode("activate");
+                setError("");
+              }}
+            >
+              Première connexion
+            </button>
+          </div>
           {error && (
             <div className="alert error" role="alert">
               {error}
             </div>
           )}
-          <Form
-            onSubmit={onLogin}
-            submit={busy ? "Connexion…" : "Se connecter"}
-            disabled={busy}
-          >
-            <Field
-              label="Adresse e-mail"
-              name="email"
-              type="email"
-              autoComplete="username"
-              placeholder="prenom@etablissement.fr"
-              required
-            />
-            <Field
-              label="Mot de passe"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Votre mot de passe"
-              required
-            />
-          </Form>
+          {mode === "login" ? (
+            <Form
+              onSubmit={(v) => submit("/api/auth/login", v)}
+              submit={busy ? "Connexion…" : "Se connecter"}
+              disabled={busy}
+            >
+              <Field
+                label="Identifiant ou adresse e-mail"
+                name="email"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                placeholder="prenom.nom ou prenom@etablissement.fr"
+                required
+              />
+              <Field
+                label="Mot de passe"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Votre mot de passe"
+                required
+              />
+              {needTotp && (
+                <Field
+                  label="Code de votre application d’authentification"
+                  name="totp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                />
+              )}
+            </Form>
+          ) : (
+            <Form
+              onSubmit={(v) => submit("/api/auth/activate", v)}
+              submit={busy ? "Activation…" : "Activer mon compte"}
+              disabled={busy}
+            >
+              <Field
+                label="Identifiant"
+                name="identifier"
+                autoCapitalize="none"
+                placeholder="prenom.nom"
+                required
+              />
+              <Field
+                label="Code d’activation"
+                name="code"
+                autoCapitalize="characters"
+                placeholder="ABCD-EFGH"
+                required
+              />
+              <Field
+                label="Choisissez votre mot de passe (12 caractères minimum)"
+                name="newPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength="12"
+                required
+              />
+            </Form>
+          )}
           <p className="login-help">
-            <ShieldCheck size={16} /> Pas d’inscription libre. Besoin d’un accès
-            ? Contactez l’administration.
+            <ShieldCheck size={16} /> Pas d’inscription libre. Mot de passe
+            oublié ou accès à obtenir ? Demandez un nouveau code à
+            l’administration ou à la vie scolaire.
           </p>
         </div>
       </div>
     </div>
   );
 }
-function Form({
-  children,
-  onSubmit,
-  submit = "Enregistrer",
-  disabled = false,
-  className = "",
-}) {
-  const [sending, setSending] = useState(false),
-    [error, setError] = useState("");
+function ForcedPassword({ user, onDone, onLogout }) {
   return (
-    <form
-      className={"form " + className}
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const form = e.currentTarget;
-        setSending(true);
-        setError("");
-        try {
-          await onSubmit(Object.fromEntries(new FormData(form)), form);
-        } catch (err) {
-          setError(err.message);
-        } finally {
-          setSending(false);
-        }
-      }}
-    >
-      {children}
-      {error && (
-        <div className="alert error" role="alert">
-          {error}
+    <div className="login-page">
+      <div className="login-main">
+        <div className="login-box">
+          <Logo />
+          <h2>Choisissez votre mot de passe</h2>
+          <p className="muted">
+            Bonjour {user.name}. Le mot de passe provisoire donné par
+            l’administration ne peut pas servir plus longtemps : choisissez le
+            vôtre pour accéder à votre espace.
+          </p>
+          <Form
+            submit="Enregistrer mon mot de passe"
+            onSubmit={async (v) => {
+              if (v.newPassword !== v.confirm)
+                throw new Error(
+                  "Les deux mots de passe ne sont pas identiques.",
+                );
+              await post("/api/auth/password", {
+                currentPassword: v.currentPassword,
+                newPassword: v.newPassword,
+              });
+              await onDone();
+            }}
+          >
+            <Field
+              label="Mot de passe provisoire"
+              name="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+            <Field
+              label="Nouveau mot de passe (12 caractères minimum)"
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength="12"
+              required
+            />
+            <Field
+              label="Confirmez le nouveau mot de passe"
+              name="confirm"
+              type="password"
+              autoComplete="new-password"
+              minLength="12"
+              required
+            />
+          </Form>
+          <button className="text-button" onClick={onLogout}>
+            Se déconnecter
+          </button>
         </div>
-      )}
-      <button className="button" disabled={disabled || sending} type="submit">
-        {sending ? "En cours…" : submit}
-        <ArrowUpRight size={16} />
-      </button>
-    </form>
-  );
-}
-function Field({ label, children, ...props }) {
-  const id = React.useId();
-  return (
-    <label className="field" htmlFor={id}>
-      <span id={`${id}-label`}>{label}</span>
-      {React.isValidElement(children)
-        ? React.cloneElement(children, { id, "aria-labelledby": `${id}-label` })
-        : children || (
-            <input {...props} id={id} aria-labelledby={`${id}-label`} />
-          )}
-    </label>
-  );
-}
-function Select({
-  label,
-  name,
-  items,
-  value,
-  onChange,
-  empty = "Choisir…",
-  required = true,
-}) {
-  return (
-    <Field label={label}>
-      <select name={name} value={value} onChange={onChange} required={required}>
-        <option value="">{empty}</option>
-        {items.map((i) => (
-          <option key={i.id} value={i.id}>
-            {title(i)}
-          </option>
-        ))}
-      </select>
-    </Field>
+      </div>
+    </div>
   );
 }
 function Section({ title, subtitle, action, onAction }) {
@@ -1653,6 +1776,16 @@ function Assistant({
               aria-label="Votre question"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
               placeholder="Explique-moi cette notion…"
               required
               maxLength="2000"
@@ -2866,321 +2999,4 @@ function Account({ user }) {
     </div>
   );
 }
-function Administration({ data, act, busy }) {
-  const [tab, setTab] = useState("users"),
-    [resetUser, setResetUser] = useState(null);
-  return (
-    <>
-      <div className="tabs">
-        {[
-          ["users", "Comptes"],
-          ["classes", "Classes"],
-          ["courses", "Cours & affectations"],
-        ].map(([k, v]) => (
-          <button
-            key={k}
-            className={tab === k ? "active" : ""}
-            onClick={() => setTab(k)}
-          >
-            {v}
-          </button>
-        ))}
-      </div>
-      {tab === "users" && (
-        <div className="two-col">
-          <div className="panel">
-            <h3>Créer un compte</h3>
-            <Form
-              disabled={busy}
-              submit="Créer le compte"
-              onSubmit={(v) =>
-                act(() =>
-                  post("/api/admin/users", {
-                    ...v,
-                    class_id: v.classId || undefined,
-                  }),
-                )
-              }
-            >
-              <Field label="Nom complet" name="name" required />
-              <Field
-                label="Adresse e-mail"
-                type="email"
-                name="email"
-                required
-              />
-              <Field
-                label="Mot de passe initial"
-                type="password"
-                name="password"
-                minLength="12"
-                required
-              />
-              <Field label="Profil">
-                <select name="role">
-                  <option value="student">Élève</option>
-                  <option value="teacher">Professeur</option>
-                  <option value="admin">Administrateur</option>
-                </select>
-              </Field>
-              <Select
-                label="Classe (élève)"
-                name="classId"
-                items={data.classes || []}
-                required={false}
-              />
-            </Form>
-          </div>
-          <div className="panel">
-            <h3>Comptes de l’établissement</h3>
-            {(data.users || []).map((u) => (
-              <div className="list-item" key={u.id}>
-                <span className="avatar small">{(u.name || "U")[0]}</span>
-                <span>
-                  <strong>{u.name}</strong>
-                  <small>
-                    {u.email} · {labelRole[u.role]}
-                  </small>
-                </span>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => setResetUser(resetUser === u.id ? null : u.id)}
-                >
-                  Réinitialiser
-                </button>
-                {resetUser === u.id && (
-                  <Form
-                    className="reset-password"
-                    submit="Enregistrer le mot de passe"
-                    disabled={busy}
-                    onSubmit={(v) =>
-                      act(
-                        () =>
-                          api(`/api/admin/users/${u.id}`, {
-                            method: "PATCH",
-                            body: { password: v.password },
-                          }),
-                        "Mot de passe réinitialisé. Les anciennes sessions sont invalidées.",
-                      )
-                    }
-                  >
-                    <Field
-                      label="Nouveau mot de passe (12 à 128 caractères)"
-                      name="password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength="12"
-                      maxLength="128"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setResetUser(null)}
-                    >
-                      Annuler
-                    </button>
-                  </Form>
-                )}
-                <button
-                  className="text-button"
-                  disabled={u.id === data.user.id}
-                  onClick={() =>
-                    act(() =>
-                      api(`/api/admin/users/${u.id}`, {
-                        method: "PATCH",
-                        body: { active: !u.active },
-                      }),
-                    )
-                  }
-                >
-                  {u.active ? "Désactiver" : "Réactiver"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {tab === "classes" && (
-        <div className="two-col">
-          <div className="panel">
-            <h3>Créer une classe</h3>
-            <Form
-              submit="Créer la classe"
-              disabled={busy}
-              onSubmit={(v) => act(() => post("/api/admin/classes", v))}
-            >
-              <Field
-                label="Nom de la classe"
-                name="name"
-                placeholder="Terminale A"
-                required
-              />
-              <Field
-                label="Niveau"
-                name="level"
-                placeholder="Terminale"
-                required
-              />
-              <Select
-                label="Année scolaire"
-                name="year_id"
-                items={data.years || []}
-                required={false}
-              />
-            </Form>
-          </div>
-          <div className="panel">
-            <h3>Classes</h3>
-            {(data.classes || []).map((c) => (
-              <div className="list-item" key={c.id}>
-                <GraduationCap size={20} />
-                <strong>{title(c)}</strong>
-                <span className="badge">{c.level}</span>
-              </div>
-            ))}
-            <h3 style={{ marginTop: 25 }}>Nouvelle année scolaire</h3>
-            <Form
-              submit="Créer l’année"
-              onSubmit={(v) => act(() => post("/api/admin/years", v))}
-            >
-              <Field
-                label="Année scolaire"
-                name="name"
-                placeholder="2027–2028"
-                required
-              />
-            </Form>
-            <h3 style={{ marginTop: 25 }}>Inscriptions actuelles</h3>
-            {(data.memberships || []).map((m) => (
-              <div className="list-item" key={`${m.user_id}-${m.class_id}`}>
-                <span>
-                  {(data.users || []).find((u) => u.id === m.user_id)?.name} ·{" "}
-                  {(data.classes || []).find((c) => c.id === m.class_id)?.name}
-                </span>
-                <button
-                  className="text-button danger"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Retirer cette inscription ? Les délégations associées seront révoquées.",
-                      )
-                    )
-                      act(() =>
-                        api(
-                          `/api/admin/memberships/${m.user_id}/${m.class_id}`,
-                          { method: "DELETE" },
-                        ),
-                      );
-                  }}
-                >
-                  Retirer
-                </button>
-              </div>
-            ))}
-            <h3 style={{ marginTop: 25 }}>Inscrire un élève</h3>
-            <Form
-              submit="Inscrire dans la classe"
-              onSubmit={(v) => act(() => post("/api/admin/memberships", v))}
-            >
-              <Select
-                label="Élève"
-                name="user_id"
-                items={(data.users || []).filter((u) => u.role === "student")}
-              />
-              <Select
-                label="Classe"
-                name="class_id"
-                items={data.classes || []}
-              />
-            </Form>
-            <h3 style={{ marginTop: 25 }}>Créer une matière</h3>
-            <Form
-              submit="Ajouter la matière"
-              onSubmit={(v) => act(() => post("/api/admin/subjects", v))}
-            >
-              <Field label="Nom de la matière" name="name" required />
-            </Form>
-          </div>
-        </div>
-      )}
-      {tab === "courses" && (
-        <div className="two-col">
-          <div className="panel">
-            <h3>Créer un espace de cours</h3>
-            <Form
-              submit="Créer et affecter"
-              disabled={busy}
-              onSubmit={(v) =>
-                act(() =>
-                  post("/api/courses", {
-                    ...v,
-                    class_id: v.classId,
-                    teacher_id: v.teacherId,
-                    subject_id: v.subjectId,
-                  }),
-                )
-              }
-            >
-              <Field label="Titre" name="title" required />
-              <Select
-                label="Matière"
-                name="subjectId"
-                items={data.subjects || []}
-              />
-              <Select
-                label="Classe"
-                name="classId"
-                items={data.classes || []}
-              />
-              <Select
-                label="Professeur"
-                name="teacherId"
-                items={(data.users || []).filter((u) => u.role === "teacher")}
-              />
-            </Form>
-          </div>
-          <div className="panel">
-            <h3>Affecter un professeur</h3>
-            <Form
-              submit="Enregistrer l’affectation"
-              onSubmit={(v) => act(() => post("/api/admin/assignments", v))}
-            >
-              <Select
-                label="Professeur"
-                name="teacher_id"
-                items={(data.users || []).filter((u) => u.role === "teacher")}
-              />
-              <Select
-                label="Classe"
-                name="class_id"
-                items={data.classes || []}
-              />
-              <Select
-                label="Matière"
-                name="subject_id"
-                items={data.subjects || []}
-              />
-            </Form>
-            <h3 style={{ marginTop: 25 }}>Cours existants</h3>
-            {(data.courses || []).map((c) => (
-              <div className="list-item" key={c.id}>
-                <BookOpen size={20} />
-                <span>
-                  <strong>{title(c)}</strong>
-                  <small>
-                    {c.subject} · {c.className || c.classId} ·{" "}
-                    {c.teacherName || c.teacherId}
-                  </small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 createRoot(document.getElementById("root")).render(<App />);
