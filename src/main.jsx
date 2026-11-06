@@ -21,6 +21,7 @@ import {
   Sparkles,
   Upload,
   Users,
+  UsersRound,
   X,
   Leaf,
   Clock,
@@ -30,6 +31,7 @@ import { api, post } from "./api";
 import { Form, Field, Select } from "./ui";
 import Administration from "./Admin";
 import { CourseAiSettings, Reports } from "./TeacherControls";
+import Groups from "./Groups";
 import StudyContent from "./StudyContent";
 import PersonalTutor from "./PersonalTutor";
 import TeacherMethod from "./TeacherMethod";
@@ -136,6 +138,7 @@ function App() {
       "quizzes",
       "library",
       "planning",
+      "groups",
       "account",
       "statistics",
       "reports",
@@ -249,6 +252,7 @@ function App() {
     ["quizzes", "Entraînement", GraduationCap],
     ["library", staff ? "Atelier IA" : "Mes révisions", FileText],
     ["planning", "Mon organisation", CalendarDays],
+    ["groups", "Groupes de travail", UsersRound],
     ["account", "Mon compte", Settings],
     ...(staff
       ? [
@@ -384,13 +388,15 @@ function App() {
               <p className="muted">
                 {view === "dashboard"
                   ? "Votre parcours IABNE : comprendre, pratiquer et progresser."
-                  : view === "courses"
-                    ? "Retrouvez les ressources partagées dans votre établissement."
-                    : view === "assistant"
-                      ? "Comprendre vos cours, une question à la fois."
-                      : view === "planning"
-                        ? "Un peu chaque jour, pour avancer sereinement."
-                        : "Votre espace pour apprendre et faire apprendre."}
+                  : view === "groups"
+                    ? "Réviser et préparer des projets ensemble, dans un cadre sûr."
+                    : view === "courses"
+                      ? "Retrouvez les ressources partagées dans votre établissement."
+                      : view === "assistant"
+                        ? "Comprendre vos cours, une question à la fois."
+                        : view === "planning"
+                          ? "Un peu chaque jour, pour avancer sereinement."
+                          : "Votre espace pour apprendre et faire apprendre."}
               </p>
             </div>
             <span className="today">
@@ -590,6 +596,7 @@ function App() {
           )}
           {view === "planning" && <Planning act={act} />}
           {view === "account" && <Account user={user} />}
+          {view === "groups" && <Groups user={user} data={data} />}
           {view === "statistics" && <Statistics />}
           {view === "reports" && staff && <Reports />}
           {view === "administration" && admin && (
