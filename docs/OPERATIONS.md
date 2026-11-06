@@ -20,6 +20,8 @@ En production, définir `NODE_ENV=production`, un `SESSION_SECRET` aléatoire d�
 
 ## Railway
 
+Le Dockerfile de déploiement n’utilise aucun montage BuildKit de type `secret`, non pris en charge par le constructeur Railway utilisé. Les certificats propres à un environnement de développement ne doivent pas être ajoutés à cette image.
+
 Utiliser le `Dockerfile` du dépôt et sa configuration Railway ; l’image installe les dépendances et construit l’interface. Déployer **une seule instance** : cette version utilise une base SQLite locale et ne permet pas plusieurs réplicas partageant leur état.
 
 Le conteneur lance `scripts/container-start.mjs` : ce point d’entrée initialise les permissions du volume monté avec les privilèges initiaux, puis passe à l’UID/GID 1000 **avant** de charger le serveur applicatif. L’application fonctionne donc sans les privilèges root. Ne pas remplacer ce mécanisme par un changement improvisé d’utilisateur Railway ; vérifier les droits des fichiers lors d’une restauration.
