@@ -104,8 +104,8 @@ function App() {
   }
   useEffect(() => {
     refresh();
-    window.addEventListener("elan:refresh", refresh);
-    return () => window.removeEventListener("elan:refresh", refresh);
+    window.addEventListener("iabne:refresh", refresh);
+    return () => window.removeEventListener("iabne:refresh", refresh);
   }, []);
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -240,8 +240,8 @@ function App() {
             <GraduationCap size={20} />
           </span>
           <div>
-            <strong>Mon établissement</strong>
-            <small>Espace pédagogique</small>
+            <strong>Yabné Paris</strong>
+            <small>Collège · Lycée</small>
           </div>
         </div>
         <p className="nav-label">MON ESPACE</p>
@@ -321,7 +321,7 @@ function App() {
               </h1>
               <p className="muted">
                 {view === "dashboard"
-                  ? "Un nouvel élan pour vos apprentissages. Tout commence ici."
+                  ? "Votre parcours IABNE : comprendre, pratiquer et progresser."
                   : view === "courses"
                     ? "Retrouvez les ressources partagées dans votre établissement."
                     : view === "assistant"
@@ -545,10 +545,10 @@ function App() {
 function Logo({ small }) {
   return (
     <div className={"logo " + (small ? "logo-small" : "")}>
-      <span className="logo-mark">
-        <Leaf size={small ? 18 : 24} />
+      <span className="logo-mark" aria-hidden="true">
+        <BookOpen size={small ? 18 : 24} />
       </span>
-      élan<span className="logo-point">.</span>
+      <span>IABNE</span>
     </div>
   );
 }
@@ -557,7 +557,7 @@ function Login({ error, onLogin, busy }) {
     <div className="login-page">
       <div className="login-story">
         <Logo />
-        <span className="pill light">L'APPRENTISSAGE PREND UN NOUVEL ÉLAN</span>
+        <span className="pill light">APPRENDRE ET PROGRESSER AVEC IABNE</span>
         <h1>
           Chaque question
           <br />
@@ -950,7 +950,7 @@ function DocumentList({ documents, staff, onStatus, onDelete, canDelete }) {
                       method: "POST",
                       body: new FormData(form),
                     });
-                    window.dispatchEvent(new Event("elan:refresh"));
+                    window.dispatchEvent(new Event("iabne:refresh"));
                     const r = await api(`/api/documents/${d.id}/versions`);
                     setVersions((v) => ({ ...v, [d.id]: r.versions || [] }));
                   } finally {

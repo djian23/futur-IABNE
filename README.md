@@ -1,4 +1,4 @@
-# Futur IABNE
+# IABNE
 
 Application scolaire en cours de développement : espaces élèves, professeurs et administration, documents pédagogiques et accompagnement fondé sur les cours. Cette première version ne constitue pas une validation de conformité ni un service prêt à accueillir les données réelles d’un établissement.
 

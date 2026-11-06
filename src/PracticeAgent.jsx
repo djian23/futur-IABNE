@@ -508,7 +508,7 @@ export default function PracticeAgent({
                             { parts: [part] },
                           );
                           setNotice(r.message);
-                          window.dispatchEvent(new Event("elan:refresh"));
+                          window.dispatchEvent(new Event("iabne:refresh"));
                         } catch (e) {
                           setError(e.message);
                         } finally {
