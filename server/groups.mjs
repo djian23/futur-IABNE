@@ -3,6 +3,7 @@ import { requireAuth, accessibleDocument } from "./auth.mjs";
 import { expandRecurring, restIntervalsFor } from "./calendar.mjs";
 import { addDays } from "./calendar-core.mjs";
 import { isQuietNow } from "./quiet.mjs";
+import { adminCan } from "./permissions.mjs";
 
 // Groupes de travail : un espace de travail encadré, pas un réseau social.
 // Pas de messages privés ; adhésion par invitation acceptée ; adultes qui consultent
@@ -103,7 +104,7 @@ function access(user, id) {
     return { group, role: m.role };
   }
   if (
-    user.role === "admin" ||
+    adminCan(user, "moderation") ||
     (user.role === "teacher" && teachesClass(user.id, group.class_id))
   )
     return { group, role: "adult" };
@@ -221,7 +222,8 @@ export function registerGroupRoutes(app) {
 
   // ---- Vue adulte : groupes de mes classes -----------------------------------
   app.get("/api/groups/overview", auth, (req, res) => {
-    if (!["teacher", "admin"].includes(req.user.role)) return forbidden(res);
+    if (req.user.role !== "teacher" && !adminCan(req.user, "moderation"))
+      return forbidden(res);
     const rows = db
       .prepare(
         `SELECT g.id,g.name,g.kind,g.class_id,g.archived_at,c.name AS class_name,
@@ -232,7 +234,8 @@ export function registerGroupRoutes(app) {
       .all(req.user.school_id)
       .filter(
         (g) =>
-          req.user.role === "admin" || teachesClass(req.user.id, g.class_id),
+          adminCan(req.user, "moderation") ||
+          teachesClass(req.user.id, g.class_id),
       );
     const classes = db
       .prepare(
@@ -240,7 +243,8 @@ export function registerGroupRoutes(app) {
       )
       .all(req.user.school_id)
       .filter(
-        (c) => req.user.role === "admin" || teachesClass(req.user.id, c.id),
+        (c) =>
+          adminCan(req.user, "moderation") || teachesClass(req.user.id, c.id),
       );
     res.json({ groups: rows, classes });
   });
@@ -283,7 +287,7 @@ export function registerGroupRoutes(app) {
       if (!teachesClass(req.user.id, klass.id)) return forbidden(res);
       if (kind !== "project")
         return bad(res, "Un professeur crée des groupes de projet.");
-    } else if (req.user.role !== "admin") return forbidden(res);
+    } else if (!adminCan(req.user, "moderation")) return forbidden(res);
     if (memberIds.length + 1 > limitFor(kind) + 1)
       return bad(res, "Trop de membres pour ce groupe.");
     for (const id of memberIds)
@@ -844,7 +848,8 @@ export function registerGroupRoutes(app) {
     });
   });
   app.get("/api/group-reports", auth, (req, res) => {
-    if (!["teacher", "admin"].includes(req.user.role)) return forbidden(res);
+    if (req.user.role !== "teacher" && !adminCan(req.user, "moderation"))
+      return forbidden(res);
     const rows = db
       .prepare(
         `SELECT r.id,r.group_id,r.target_type,r.target_id,r.reason,r.status,r.created_at,g.name AS group_name,g.class_id,
@@ -854,7 +859,8 @@ export function registerGroupRoutes(app) {
       .all(req.user.school_id)
       .filter(
         (r) =>
-          req.user.role === "admin" || teachesClass(req.user.id, r.class_id),
+          adminCan(req.user, "moderation") ||
+          teachesClass(req.user.id, r.class_id),
       )
       .map(({ class_id, ...r }) => ({ ...r, reporter: "Un élève du groupe" }));
     res.json({ reports: rows });
@@ -869,7 +875,7 @@ export function registerGroupRoutes(app) {
       !r ||
       r.school_id !== req.user.school_id ||
       !(
-        req.user.role === "admin" ||
+        adminCan(req.user, "moderation") ||
         (req.user.role === "teacher" && teachesClass(req.user.id, r.class_id))
       )
     )

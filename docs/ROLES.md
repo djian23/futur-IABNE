@@ -2,7 +2,7 @@
 
 Principe : **chacun accède à ce dont il a besoin pour son métier, pas plus.** La direction et l’administration **pilotent** ; les professeurs **enseignent** ; les élèves **apprennent**. Ces règles sont appliquées par le serveur (pas seulement masquées dans l’interface) et couvertes par des tests.
 
-## Direction / administration — piloter
+## Direction / administration — piloter (voir les trois profils plus bas)
 Pour : créer et gérer les comptes, la structure de l’établissement, avoir une **vision globale**, protéger les élèves.
 
 | Peut | Ne peut pas |
@@ -60,5 +60,23 @@ La direction voit le détail **par classe, par niveau et par matière**, mais ja
 - Les croisements matière × niveau ne sont pas proposés, pour la même raison.
 Si la direction veut aller plus loin, la bonne voie est un échange avec le professeur concerné, pas une donnée de plus dans l'outil.
 
+## Trois profils d'administration
+Le rôle technique reste « Administration », mais chaque compte a un **profil** (modifiable par un profil complet, onglet Comptes) :
+
+| Fonction | Secrétariat | Direction | Complet |
+| --- | :-: | :-: | :-: |
+| Créer / désactiver des comptes, codes d'activation, import CSV | oui | — | oui |
+| Classes, matières, affectations, changement de classe, passage d'année, co-enseignants | oui | — | oui |
+| Voir la liste des comptes | oui | oui (lecture) | oui |
+| Calendrier de l'établissement | oui | oui | oui |
+| Pilotage (statistiques globales, par classe, niveau, matière) | — | oui | oui |
+| Alertes de sécurité (élève à contacter) | — | oui | oui |
+| Journal d'audit | — | oui | oui |
+| Export et suppression RGPD d'un compte | — | oui | oui |
+| Modération des groupes de travail | — | oui | oui |
+| Créer ou modifier un compte d'administration, changer un profil | — | — | oui |
+
+Pourquoi : le secrétariat fait fonctionner l'établissement sans voir d'indicateurs ni d'alertes sensibles ; la direction pilote et répond des droits des personnes sans pouvoir créer de comptes ni modifier la structure ; le profil **complet** est réservé à 1 ou 2 personnes (le premier compte créé à l'installation, par exemple). Il reste toujours au moins un compte complet actif. Un secrétariat ou une direction ne peut pas modifier un compte d'administration.
+
 ## Évolution possible (non réalisée)
-Un rôle unique « administration » regroupe aujourd’hui la direction et le secrétariat. À terme, on peut les séparer : **secrétariat** (comptes, import, structure, sans statistiques), **direction** (pilotage et alertes, sans gestion de comptes), **vie scolaire / CPE** (alertes et groupes de ses niveaux), **professeur principal** (vue de sa classe), **référent numérique**, **DPO** (audit et droits RGPD). Le modèle de droits est centralisé dans `canManageCourse` / `canAccessCourse` (`server/auth.mjs`) et les gardes de `server/admin.mjs`, ce qui permet d’ajouter ces rôles sans réécrire les cours.
+Vie scolaire / CPE (alertes et groupes de ses niveaux seulement), professeur principal (vue de sa classe), référent numérique, DPO (audit et droits RGPD sans pilotage). Le modèle de droits est centralisé dans `server/permissions.mjs` (capacités) et `canManageCourse` / `canAccessCourse` (`server/auth.mjs`), ce qui permet d'ajouter ces profils sans réécrire les cours.

@@ -1,5 +1,6 @@
 import { db, uid, now } from "./db.mjs";
 import { requireAuth } from "./auth.mjs";
+import { adminCan } from "./permissions.mjs";
 import { addDays, restIntervals, restPeriods } from "./calendar-core.mjs";
 
 export function initializeCalendar() {
@@ -80,7 +81,7 @@ export function registerCalendarRoutes(app) {
     });
   });
   const adminOnly = (req, res) => {
-    if (req.user.role !== "admin") {
+    if (!adminCan(req.user, "calendar")) {
       res.status(403).json({ error: "Accès interdit." });
       return false;
     }

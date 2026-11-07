@@ -110,10 +110,12 @@ function Overview({ alertsOnly = false }) {
     [alerts, setAlerts] = useState([]),
     [error, setError] = useState("");
   const load = useCallback(() => {
-    Promise.all([api("/api/admin/overview"), api("/api/admin/safety-alerts")])
-      .then(([o, a]) => {
+    api("/api/admin/overview")
+      .then(async (o) => {
         setOverview(o);
-        setAlerts(a.alerts || []);
+        // Les alertes de sécurité ne concernent que la direction (et le profil complet).
+        if (o.attention)
+          setAlerts((await api("/api/admin/safety-alerts")).alerts || []);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -170,14 +172,21 @@ function Overview({ alertsOnly = false }) {
             [accounts.neverLoggedIn, "jamais connectés"],
             [structure.classes, "classes"],
             [structure.publishedDocuments, "documents publiés"],
-            [ai.requestsLast7Days, "demandes IA sur 7 jours"],
-            [attention.openAiReports, "signalements de réponses IA"],
-            [
-              Math.round(
-                (ai.tokensLast30Days.input + ai.tokensLast30Days.output) / 1000,
-              ),
-              "milliers de jetons IA sur 30 jours",
-            ],
+            ...(ai
+              ? [
+                  [ai.requestsLast7Days, "demandes IA sur 7 jours"],
+                  [
+                    Math.round(
+                      (ai.tokensLast30Days.input + ai.tokensLast30Days.output) /
+                        1000,
+                    ),
+                    "milliers de jetons IA sur 30 jours",
+                  ],
+                ]
+              : []),
+            ...(attention
+              ? [[attention.openAiReports, "signalements de réponses IA"]]
+              : []),
           ].map(([value, label]) => (
             <div className="stat" key={label}>
               <div>
@@ -190,16 +199,21 @@ function Overview({ alertsOnly = false }) {
       )}
       {!alertsOnly && (
         <p className="muted">
-          Plafond de l’établissement : {ai.hourlySchoolLimit} demandes IA par
-          heure. Ces chiffres sont des compteurs globaux ; aucune conversation
-          n’est consultable ici.
+          {ai
+            ? `Plafond de l’établissement : ${ai.hourlySchoolLimit} demandes IA par heure. `
+            : ""}
+          Ces chiffres sont des compteurs globaux ; aucune conversation n’est
+          consultable ici.
         </p>
       )}
     </>
   );
 }
 
-function Accounts({ data, act, busy }) {
+function Accounts({ data, act, busy, kind = "full" }) {
+  const canManage = ["full", "secretariat"].includes(kind),
+    canErase = ["full", "direction"].includes(kind),
+    isFull = kind === "full";
   const [filters, setFilters] = useState({
       q: "",
       role: "",
@@ -237,70 +251,92 @@ function Accounts({ data, act, busy }) {
   }
   return (
     <div className="two-col">
-      <div className="panel">
-        <h3>Créer un compte</h3>
-        {created && (
-          <ActivationCard account={created} onClose={() => setCreated(null)} />
-        )}
-        <Form
-          disabled={busy}
-          submit="Créer le compte"
-          onSubmit={async (v, form) => {
-            const body = {
-              name: v.name,
-              role: v.role,
-              email: v.email || undefined,
-              class_id: v.classId || undefined,
-              password: mode === "password" ? v.password : undefined,
-            };
-            const r = await post("/api/admin/users", body);
-            form.reset();
-            if (r.user.activation_code) setCreated(r.user);
-            load();
-            window.dispatchEvent(new Event("iabne:refresh"));
-          }}
-        >
-          <Field label="Nom complet" name="name" required />
-          <Field label="Profil">
-            <select name="role">
-              <option value="student">Élève</option>
-              <option value="teacher">Professeur</option>
-              <option value="admin">Administration</option>
-            </select>
-          </Field>
-          <Field
-            label="Adresse e-mail (facultative pour un élève ; obligatoire pour l’administration)"
-            type="email"
-            name="email"
-          />
-          <Select
-            label="Classe (élève)"
-            name="classId"
-            items={(data.classes || []).filter((c) => !c.archived_at)}
-            required={false}
-          />
-          <Field label="Première connexion">
-            <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="code">Code d’activation (recommandé)</option>
-              <option value="password">Mot de passe provisoire</option>
-            </select>
-          </Field>
-          {mode === "password" && (
-            <Field
-              label="Mot de passe provisoire (12 caractères minimum, changement obligatoire)"
-              type="text"
-              name="password"
-              autoComplete="off"
-              minLength="12"
-              required
+      {canManage && (
+        <div className="panel">
+          <h3>Créer un compte</h3>
+          {created && (
+            <ActivationCard
+              account={created}
+              onClose={() => setCreated(null)}
             />
           )}
-        </Form>
-        <p className="muted">
-          Avec un code d’activation, vous n’avez jamais connaissance du mot de
-          passe : la personne le choisit elle-même.
-        </p>
-      </div>
+          <Form
+            disabled={busy}
+            submit="Créer le compte"
+            onSubmit={async (v, form) => {
+              const body = {
+                name: v.name,
+                role: v.role,
+                email: v.email || undefined,
+                class_id: v.classId || undefined,
+                password: mode === "password" ? v.password : undefined,
+                admin_kind:
+                  v.role === "admin" ? v.admin_kind || "full" : undefined,
+              };
+              const r = await post("/api/admin/users", body);
+              form.reset();
+              if (r.user.activation_code) setCreated(r.user);
+              load();
+              window.dispatchEvent(new Event("iabne:refresh"));
+            }}
+          >
+            <Field label="Nom complet" name="name" required />
+            <Field label="Profil">
+              <select name="role">
+                <option value="student">Élève</option>
+                <option value="teacher">Professeur</option>
+                <option value="admin">Administration</option>
+              </select>
+            </Field>
+            {isFull && (
+              <Field label="Profil d’administration (si le profil ci-dessus est « Administration »)">
+                <select name="admin_kind" defaultValue="secretariat">
+                  <option value="secretariat">
+                    Secrétariat : comptes, import, structure
+                  </option>
+                  <option value="direction">
+                    Direction : pilotage, alertes, journal, RGPD
+                  </option>
+                  <option value="full">
+                    Complet : tout (à réserver à 1 ou 2 personnes)
+                  </option>
+                </select>
+              </Field>
+            )}
+            <Field
+              label="Adresse e-mail (facultative pour un élève ; obligatoire pour l’administration)"
+              type="email"
+              name="email"
+            />
+            <Select
+              label="Classe (élève)"
+              name="classId"
+              items={(data.classes || []).filter((c) => !c.archived_at)}
+              required={false}
+            />
+            <Field label="Première connexion">
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="code">Code d’activation (recommandé)</option>
+                <option value="password">Mot de passe provisoire</option>
+              </select>
+            </Field>
+            {mode === "password" && (
+              <Field
+                label="Mot de passe provisoire (12 caractères minimum, changement obligatoire)"
+                type="text"
+                name="password"
+                autoComplete="off"
+                minLength="12"
+                required
+              />
+            )}
+          </Form>
+          <p className="muted">
+            Avec un code d’activation, vous n’avez jamais connaissance du mot de
+            passe : la personne le choisit elle-même.
+          </p>
+        </div>
+      )}
       <div className="panel">
         <h3>Comptes ({list.total})</h3>
         <div className="filters">
@@ -366,66 +402,98 @@ function Accounts({ data, act, busy }) {
               </small>
             </span>
             <span className="row-actions">
-              <button
-                className="text-button"
-                disabled={busy || u.id === data.user.id}
-                onClick={() =>
-                  act(async () => {
-                    const r = await post(
-                      `/api/admin/users/${u.id}/activation-code`,
-                      {},
-                    );
-                    setCreated({ ...u, activation_code: r.activation_code });
-                    load();
-                  }, "Nouveau code généré. Les anciennes sessions sont fermées.")
-                }
-              >
-                Nouveau code
-              </button>
-              <button
-                className="text-button"
-                disabled={busy || u.id === data.user.id}
-                onClick={() => {
-                  if (
-                    u.active &&
-                    !window.confirm(
-                      `Désactiver le compte de ${u.name} ? La personne sera déconnectée.`,
+              {isFull && u.role === "admin" && (
+                <select
+                  aria-label={`Profil d’administration de ${u.name}`}
+                  value={u.admin_kind}
+                  disabled={busy}
+                  onChange={(e) =>
+                    run(
+                      () =>
+                        api(`/api/admin/users/${u.id}`, {
+                          method: "PATCH",
+                          body: { admin_kind: e.target.value },
+                        }),
+                      "Profil d’administration modifié.",
                     )
-                  )
-                    return;
-                  run(() =>
-                    api(`/api/admin/users/${u.id}`, {
-                      method: "PATCH",
-                      body: { active: !u.active },
-                    }),
-                  );
-                }}
-              >
-                {u.active ? "Désactiver" : "Réactiver"}
-              </button>
-              <button className="text-button" onClick={() => exportData(u)}>
-                Exporter
-              </button>
-              <button
-                className="text-button danger"
-                disabled={busy || u.id === data.user.id}
-                onClick={() => {
-                  const typed = window.prompt(
-                    `Suppression définitive de ${u.name} et de toutes ses données (irréversible).\nPour confirmer, saisissez : ${u.email}`,
-                  );
-                  if (typed === null) return;
-                  run(
-                    () =>
-                      api(`/api/admin/users/${u.id}`, {
-                        method: "DELETE",
-                        body: { confirm: typed.trim() },
-                      }),
-                    "Compte et données supprimés.",
-                  );
-                }}
-              >
-                Supprimer
-              </button>
+                  }
+                >
+                  <option value="full">Complet</option>
+                  <option value="secretariat">Secrétariat</option>
+                  <option value="direction">Direction</option>
+                </select>
+              )}
+              {canManage && (
+                <>
+                  <button
+                    className="text-button"
+                    disabled={busy || u.id === data.user.id}
+                    onClick={() =>
+                      act(async () => {
+                        const r = await post(
+                          `/api/admin/users/${u.id}/activation-code`,
+                          {},
+                        );
+                        setCreated({
+                          ...u,
+                          activation_code: r.activation_code,
+                        });
+                        load();
+                      }, "Nouveau code généré. Les anciennes sessions sont fermées.")
+                    }
+                  >
+                    Nouveau code
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={busy || u.id === data.user.id}
+                    onClick={() => {
+                      if (
+                        u.active &&
+                        !window.confirm(
+                          `Désactiver le compte de ${u.name} ? La personne sera déconnectée.`,
+                        )
+                      )
+                        return;
+                      run(() =>
+                        api(`/api/admin/users/${u.id}`, {
+                          method: "PATCH",
+                          body: { active: !u.active },
+                        }),
+                      );
+                    }}
+                  >
+                    {u.active ? "Désactiver" : "Réactiver"}
+                  </button>
+                </>
+              )}
+              {canErase && (
+                <>
+                  <button className="text-button" onClick={() => exportData(u)}>
+                    Exporter
+                  </button>
+                  <button
+                    className="text-button danger"
+                    disabled={busy || u.id === data.user.id}
+                    onClick={() => {
+                      const typed = window.prompt(
+                        `Suppression définitive de ${u.name} et de toutes ses données (irréversible).\nPour confirmer, saisissez : ${u.email}`,
+                      );
+                      if (typed === null) return;
+                      run(
+                        () =>
+                          api(`/api/admin/users/${u.id}`, {
+                            method: "DELETE",
+                            body: { confirm: typed.trim() },
+                          }),
+                        "Compte et données supprimés.",
+                      );
+                    }}
+                  >
+                    Supprimer
+                  </button>
+                </>
+              )}
             </span>
           </div>
         ))}
@@ -1560,19 +1628,33 @@ export function Pilotage({ onNavigate }) {
 }
 
 export default function Administration({ data, act, busy }) {
-  const [tab, setTab] = useState("overview");
+  const kind = data.user.admin_kind || "full";
+  const all = ["full", "secretariat", "direction"];
   const tabs = [
-    ["overview", "Vue d’ensemble"],
-    ["users", "Comptes"],
-    ["import", "Importer"],
-    ["structure", "Classes & cours"],
-    ["year", "Nouvelle année"],
-    ["calendar", "Calendrier"],
-    ["security", "Sécurité"],
-    ["audit", "Journal"],
-  ];
+    ["overview", "Vue d’ensemble", all],
+    ["users", kind === "direction" ? "Comptes (lecture)" : "Comptes", all],
+    ["import", "Importer", ["full", "secretariat"]],
+    ["structure", "Classes & cours", ["full", "secretariat"]],
+    ["year", "Nouvelle année", ["full", "secretariat"]],
+    ["calendar", "Calendrier", all],
+    ["security", "Sécurité", all],
+    ["audit", "Journal", ["full", "direction"]],
+  ].filter(([, , who]) => who.includes(kind));
+  const [tab, setTab] = useState("overview");
   return (
     <>
+      {kind !== "full" && (
+        <div className="alert" role="note">
+          Profil :{" "}
+          <strong>
+            {kind === "secretariat" ? "Secrétariat" : "Direction"}
+          </strong>
+          .{" "}
+          {kind === "secretariat"
+            ? "Vous gérez les comptes, l’import et la structure de l’établissement. Les statistiques, alertes de sécurité et le journal relèvent de la direction."
+            : "Vous pilotez l’établissement, traitez les alertes et consultez le journal. La création des comptes et la structure relèvent du secrétariat."}
+        </div>
+      )}
       <div className="tabs" role="tablist">
         {tabs.map(([k, v]) => (
           <button
@@ -1587,7 +1669,9 @@ export default function Administration({ data, act, busy }) {
         ))}
       </div>
       {tab === "overview" && <Overview />}
-      {tab === "users" && <Accounts data={data} act={act} busy={busy} />}
+      {tab === "users" && (
+        <Accounts data={data} act={act} busy={busy} kind={kind} />
+      )}
       {tab === "import" && <ImportAccounts busy={busy} />}
       {tab === "structure" && <Structure data={data} act={act} busy={busy} />}
       {tab === "year" && <SchoolYear data={data} act={act} busy={busy} />}

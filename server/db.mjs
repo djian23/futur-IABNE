@@ -36,6 +36,15 @@ CREATE INDEX IF NOT EXISTS idx_audit_school ON audit_log(school_id,created_at);
 CREATE TABLE IF NOT EXISTS course_teachers(course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,role TEXT NOT NULL DEFAULT 'co' CHECK(role IN ('co','substitute')),starts_at TEXT,ends_at TEXT,PRIMARY KEY(course_id,teacher_id));
 CREATE TABLE IF NOT EXISTS classes_meta(class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,kind TEXT NOT NULL DEFAULT 'class' CHECK(kind IN ('class','group')),archived_at TEXT);
 `);
+if (
+  !db
+    .prepare("PRAGMA table_info(user_extras)")
+    .all()
+    .some((c) => c.name === "admin_kind")
+)
+  db.exec(
+    "ALTER TABLE user_extras ADD COLUMN admin_kind TEXT NOT NULL DEFAULT 'full' CHECK(admin_kind IN ('full','secretariat','direction'))",
+  );
 
 if (process.env.SEED_DEMO === "true") {
   if (process.env.NODE_ENV === "production")

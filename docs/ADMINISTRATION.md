@@ -1,6 +1,6 @@
 # Administration
 
-Réservée au profil « Administration ». Toutes les actions sensibles sont inscrites dans le **journal d’audit** (onglet « Journal »), sans mot de passe ni code.
+Réservée aux comptes « Administration », selon leur profil (secrétariat, direction ou complet : voir [ROLES.md](ROLES.md)). Toutes les actions sensibles sont inscrites dans le **journal d’audit** (onglet « Journal »), sans mot de passe ni code.
 
 ## Comptes
 - **Création** : nom, profil, classe (élèves). L’adresse e-mail est facultative pour un élève : un identifiant `prenom.nom` est généré (`prenom.nom2` en cas d’homonyme). Plusieurs frères et sœurs peuvent donc exister sans adresse partagée.

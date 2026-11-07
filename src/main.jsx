@@ -246,13 +246,19 @@ function App() {
     chapters = data.chapters || [],
     classes = data.classes || [],
     delegations = data.delegations || [];
+  const adminKind = user.admin_kind || "full";
   const nav = admin
-    ? [
-        ["dashboard", "Pilotage de l’établissement", LayoutDashboard],
-        ["administration", "Administration", Users],
-        ["groups", "Groupes de travail", UsersRound],
-        ["account", "Mon compte", Settings],
-      ]
+    ? adminKind === "secretariat"
+      ? [
+          ["dashboard", "Administration", Users],
+          ["account", "Mon compte", Settings],
+        ]
+      : [
+          ["dashboard", "Pilotage de l’établissement", LayoutDashboard],
+          ["administration", "Administration", Users],
+          ["groups", "Groupes de travail", UsersRound],
+          ["account", "Mon compte", Settings],
+        ]
     : [
         ["dashboard", "Vue d’ensemble", LayoutDashboard],
         ["courses", "Mes cours", BookOpen],
@@ -396,9 +402,11 @@ function App() {
               </h1>
               <p className="muted">
                 {current === "dashboard"
-                  ? admin
-                    ? "Une vision globale de l’établissement, sans accès aux contenus des cours ni aux conversations."
-                    : "Votre parcours IABNE : comprendre, pratiquer et progresser."
+                  ? admin && adminKind === "secretariat"
+                    ? "Comptes, import, classes et affectations de l’établissement."
+                    : admin
+                      ? "Une vision globale de l’établissement, sans accès aux contenus des cours ni aux conversations."
+                      : "Votre parcours IABNE : comprendre, pratiquer et progresser."
                   : current === "groups"
                     ? "Réviser et préparer des projets ensemble, dans un cadre sûr."
                     : current === "courses"
@@ -433,7 +441,10 @@ function App() {
               {notice}
             </div>
           )}
-          {current === "dashboard" && admin && (
+          {current === "dashboard" && admin && adminKind === "secretariat" && (
+            <Administration data={data} act={act} busy={busy} />
+          )}
+          {current === "dashboard" && admin && adminKind !== "secretariat" && (
             <Pilotage onNavigate={navigate} />
           )}
           {current === "dashboard" && !admin && (

@@ -1198,3 +1198,260 @@ test("pilotage détaillé : niveaux et matières, avec seuils anti-évaluation",
   assert.match(hidden.reason, /Un seul professeur/);
   assert.equal(hidden.aiQuestions30d, undefined);
 });
+
+async function adminOfKind(kind) {
+  const email = `${uniq(kind)}@exemple.fr`;
+  const created = await admin("/api/admin/users", "POST", {
+    name: `Admin ${kind}`,
+    role: "admin",
+    email,
+    admin_kind: kind,
+  });
+  assert.equal(created.response.status, 201, JSON.stringify(created.data));
+  const done = await request("/api/auth/activate", {
+    method: "POST",
+    body: {
+      identifier: email,
+      code: created.data.user.activation_code,
+      newPassword: "Profil sérieux et long 6",
+    },
+  });
+  const name = uniq("acc");
+  accounts[name] = {
+    cookie: done.response.headers.get("set-cookie").split(";")[0],
+    user: created.data.user,
+  };
+  return name;
+}
+
+test("profils d’administration : le secrétariat gère comptes et structure, sans statistiques ni alertes", async () => {
+  const sec = await adminOfKind("secretariat");
+  const me = await as(sec, "/api/auth/me");
+  assert.equal(me.data.user.admin_kind, "secretariat");
+  const ok = await as(sec, "/api/admin/users", {
+    method: "POST",
+    body: {
+      name: "Élève du secrétariat",
+      role: "student",
+      class_id: "class-demo",
+    },
+  });
+  assert.equal(ok.response.status, 201);
+  assert.equal(
+    (
+      await as(sec, "/api/admin/classes", {
+        method: "POST",
+        body: { name: uniq("Sec "), level: "Seconde" },
+      })
+    ).response.status,
+    201,
+  );
+  assert.equal((await as(sec, "/api/admin/users")).response.status, 200);
+  const overview = await as(sec, "/api/admin/overview");
+  assert.equal(overview.response.status, 200);
+  assert.equal(overview.data.attention, undefined);
+  assert.equal(overview.data.ai, undefined);
+  for (const [route, method] of [
+    ["/api/admin/pilotage", "GET"],
+    ["/api/admin/audit", "GET"],
+    ["/api/admin/safety-alerts", "GET"],
+    ["/api/admin/groups", "GET"],
+  ]) {
+    const r = await as(sec, route, { method });
+    assert.ok(
+      [403, 404].includes(r.response.status),
+      `${route} → ${r.response.status}`,
+    );
+  }
+  assert.equal((await as(sec, "/api/admin/pilotage")).response.status, 403);
+  assert.equal(
+    (await as(sec, `/api/admin/users/${ok.data.user.id}/export`)).response
+      .status,
+    403,
+    "Export réservé à la direction",
+  );
+  assert.equal(
+    (
+      await as(sec, `/api/admin/users/${ok.data.user.id}`, {
+        method: "DELETE",
+        body: { confirm: ok.data.user.email },
+      })
+    ).response.status,
+    403,
+  );
+  assert.equal((await as(sec, "/api/groups/overview")).response.status, 403);
+  // Un secrétariat ne crée ni ne modifie de compte d'administration.
+  assert.equal(
+    (
+      await as(sec, "/api/admin/users", {
+        method: "POST",
+        body: {
+          name: "Intrus",
+          role: "admin",
+          email: `${uniq("x")}@exemple.fr`,
+        },
+      })
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await as(sec, `/api/admin/users/${accounts.admin.user.id}`, {
+        method: "PATCH",
+        body: { active: 0 },
+      })
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await as(
+        sec,
+        `/api/admin/users/${accounts.admin.user.id}/activation-code`,
+        { method: "POST", body: {} },
+      )
+    ).response.status,
+    403,
+  );
+  assert.equal(
+    (
+      await as(sec, `/api/admin/users/${me.data.user.id}`, {
+        method: "PATCH",
+        body: { admin_kind: "full" },
+      })
+    ).response.status,
+    403,
+  );
+});
+
+test("profils d’administration : la direction pilote et lit, sans gérer comptes ni structure", async () => {
+  const dir = await adminOfKind("direction");
+  assert.equal((await as(dir, "/api/admin/pilotage")).response.status, 200);
+  assert.equal((await as(dir, "/api/admin/audit")).response.status, 200);
+  assert.equal(
+    (await as(dir, "/api/admin/safety-alerts")).response.status,
+    200,
+  );
+  assert.equal((await as(dir, "/api/admin/users")).response.status, 200);
+  const overview = await as(dir, "/api/admin/overview");
+  assert.ok(overview.data.attention && overview.data.ai);
+  assert.equal((await as(dir, "/api/groups/overview")).response.status, 200);
+  assert.equal(
+    (
+      await as(dir, "/api/admin/calendar", {
+        method: "POST",
+        body: {
+          start_date: "2031-05-01",
+          end_date: "2031-05-01",
+          label: "Pont",
+          kind: "info",
+        },
+      })
+    ).response.status,
+    201,
+  );
+  for (const [route, method, body] of [
+    ["/api/admin/users", "POST", { name: "Non", role: "student" }],
+    ["/api/admin/import/preview", "POST", { csv: "nom;prénom\nA;B" }],
+    ["/api/admin/classes", "POST", { name: "Non", level: "Seconde" }],
+    ["/api/admin/years", "POST", { name: "Non" }],
+    ["/api/admin/subjects", "POST", { name: "Non" }],
+    ["/api/admin/years/rollover", "POST", {}],
+    ["/api/admin/course-teachers", "POST", {}],
+  ]) {
+    const r = await as(dir, route, { method, body });
+    assert.equal(r.response.status, 403, `${method} ${route}`);
+    assert.equal(r.data.code, "admin_capability");
+  }
+  const memberships = await as(dir, "/api/admin/memberships", {
+    method: "POST",
+    body: { user_id: accounts.student.user.id, class_id: "class-demo" },
+  });
+  assert.equal(memberships.response.status, 403);
+  // Droits RGPD : la direction exporte et supprime.
+  const s = await admin("/api/admin/users", "POST", {
+    name: "Export Direction",
+    role: "student",
+    email: `${uniq("exp")}@exemple.fr`,
+    class_id: "class-demo",
+  });
+  assert.equal(
+    (await as(dir, `/api/admin/users/${s.data.user.id}/export`)).response
+      .status,
+    200,
+  );
+  assert.equal(
+    (
+      await as(dir, `/api/admin/users/${s.data.user.id}`, {
+        method: "DELETE",
+        body: { confirm: s.data.user.email },
+      })
+    ).response.status,
+    200,
+  );
+  // Pas de contenu de cours non plus.
+  assert.equal(
+    (
+      await as(dir, "/api/ai/chat", {
+        method: "POST",
+        body: { courseId: "course-demo", question: "Bonjour" },
+      })
+    ).response.status,
+    404,
+  );
+});
+
+test("profils d’administration : changement de profil par un compte complet, toujours un compte complet", async () => {
+  const dir = await adminOfKind("direction");
+  const change = await admin(
+    `/api/admin/users/${accounts[dir].user.id}`,
+    "PATCH",
+    { admin_kind: "secretariat" },
+  );
+  assert.equal(change.response.status, 200, JSON.stringify(change.data));
+  assert.equal(
+    (await as(dir, "/api/admin/pilotage")).response.status,
+    403,
+    "Droits retirés aussitôt",
+  );
+  assert.equal(
+    (
+      await admin(`/api/admin/users/${accounts[dir].user.id}`, "PATCH", {
+        admin_kind: "pirate",
+      })
+    ).response.status,
+    400,
+  );
+  assert.equal(
+    (
+      await admin(`/api/admin/users/${accounts.student.user.id}`, "PATCH", {
+        admin_kind: "direction",
+      })
+    ).response.status,
+    400,
+    "Seulement pour un compte d’administration",
+  );
+  // Quand il n'existe plus qu'un seul compte complet actif, il ne peut pas être rétrogradé.
+  fixtureDb
+    .prepare("UPDATE users SET active=0 WHERE role='admin' AND id<>?")
+    .run(accounts.admin.user.id);
+  const lastFull = await admin(
+    `/api/admin/users/${accounts.admin.user.id}`,
+    "PATCH",
+    { admin_kind: "direction" },
+  );
+  assert.equal(
+    lastFull.response.status,
+    409,
+    "Le dernier compte complet est protégé",
+  );
+  fixtureDb.prepare("UPDATE users SET active=1 WHERE role='admin'").run();
+  const list = await admin("/api/admin/users?role=admin");
+  assert.ok(
+    list.data.users.every((u) =>
+      ["full", "secretariat", "direction"].includes(u.admin_kind),
+    ),
+  );
+  const audit = await admin("/api/admin/audit?limit=200");
+  assert.ok(audit.data.entries.some((e) => e.action === "user.admin_kind"));
+});

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { db, uid, now } from "./db.mjs";
 import { passwordProblem, sameActivationCode } from "./passwords.mjs";
 import { verifyTotp } from "./totp.mjs";
+import { adminCan } from "./permissions.mjs";
 
 export const publicUser = (u) =>
   u && {
@@ -27,13 +28,16 @@ export function requireAuth(req, res, next) {
   if (!user) return res.status(401).json({ error: "Connexion requise." });
   const extras = db
     .prepare(
-      "SELECT login_id,must_change_password,totp_enabled FROM user_extras WHERE user_id=?",
+      "SELECT login_id,must_change_password,totp_enabled,admin_kind FROM user_extras WHERE user_id=?",
     )
     .get(user.id);
   req.user = {
     ...publicUser(user),
     must_change_password: Boolean(extras?.must_change_password),
     two_factor: Boolean(extras?.totp_enabled),
+    ...(user.role === "admin"
+      ? { admin_kind: extras?.admin_kind || "full" }
+      : {}),
     ...(extras?.login_id ? { login_id: extras.login_id } : {}),
   };
   if (
@@ -502,7 +506,7 @@ export function registerAuthRoutes(app) {
     });
   });
   app.post("/api/admin/memberships", requireAuth, (req, res) => {
-    if (req.user.role !== "admin") return deny(res);
+    if (!adminCan(req.user, "structure")) return deny(res);
     const { user_id, class_id } = req.body;
     if (
       scoped("users", user_id, req.user.school_id)?.role !== "student" ||
@@ -519,7 +523,7 @@ export function registerAuthRoutes(app) {
     "/api/admin/memberships/:userId/:classId",
     requireAuth,
     (req, res) => {
-      if (req.user.role !== "admin") return deny(res);
+      if (!adminCan(req.user, "structure")) return deny(res);
       const { userId, classId } = req.params;
       if (
         !scoped("users", userId, req.user.school_id) ||
@@ -540,7 +544,7 @@ export function registerAuthRoutes(app) {
     },
   );
   app.post("/api/admin/assignments", requireAuth, (req, res) => {
-    if (req.user.role !== "admin") return deny(res);
+    if (!adminCan(req.user, "structure")) return deny(res);
     const { teacher_id, class_id, subject_id } = req.body;
     if (
       scoped("users", teacher_id, req.user.school_id)?.role !== "teacher" ||
@@ -560,7 +564,7 @@ export function registerAuthRoutes(app) {
       { class_id, subject_id } = req.body,
       teacher_id = u.role === "teacher" ? u.id : req.body.teacher_id,
       title = text(req.body.title);
-    if (!["teacher", "admin"].includes(u.role)) return deny(res);
+    if (u.role !== "teacher" && !adminCan(u, "structure")) return deny(res);
     if (
       !title ||
       scoped("users", teacher_id, u.school_id)?.role !== "teacher" ||

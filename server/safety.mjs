@@ -1,5 +1,6 @@
 import { db, uid, now } from "./db.mjs";
 import { requireAuth } from "./auth.mjs";
+import { adminCan } from "./permissions.mjs";
 
 // Protection des mineurs : détection volontairement simple et locale, sans appel
 // à un fournisseur IA. Elle ne remplace ni un adulte ni un diagnostic. Elle sert
@@ -103,7 +104,7 @@ export function recordSafetyAlert(user, courseId, category) {
 export function registerSafetyRoutes(app) {
   initializeSafety();
   app.get("/api/admin/safety-alerts", requireAuth, (req, res) => {
-    if (req.user.role !== "admin")
+    if (!adminCan(req.user, "pilotage"))
       return res
         .status(403)
         .json({ error: "Accès réservé à l’administration." });
@@ -124,7 +125,7 @@ export function registerSafetyRoutes(app) {
     });
   });
   app.post("/api/admin/safety-alerts/:id/handled", requireAuth, (req, res) => {
-    if (req.user.role !== "admin")
+    if (!adminCan(req.user, "pilotage"))
       return res
         .status(403)
         .json({ error: "Accès réservé à l’administration." });
