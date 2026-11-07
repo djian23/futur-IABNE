@@ -10,7 +10,7 @@ Pour : créer et gérer les comptes, la structure de l’établissement, avoir u
 | Créer, activer, désactiver, supprimer des comptes ; importer ; codes d’activation | Lire un cours, un document, un corrigé, une méthode de professeur |
 | Créer classes, groupes d’enseignement, matières, années ; affecter les professeurs ; passage d’année | Utiliser l’assistant IA, les quiz, l’atelier IA (ce sont des outils pédagogiques) |
 | Désigner un titulaire, un co-enseignant, un remplaçant d’un cours | Lire la conversation, la mémoire ou le planning d’un élève |
-| **Pilotage** : agrégats globaux (activité par classe à partir de 5 élèves, par semaine, adoption, matières sans contenu, volumes IA) | Voir le nom d’un élève ou d’un professeur dans les statistiques ; évaluer un professeur |
+| **Pilotage** : agrégats globaux et détaillés **par classe, par niveau et par matière** (activité par semaine, adoption, matières sans contenu, volumes IA), avec seuils : 5 élèves minimum, et pour une matière au moins 2 professeurs | Voir le nom d’un élève ou d’un professeur dans les statistiques ; évaluer un professeur |
 | Voir et traiter les **alertes de sécurité** (élève à contacter, sans le message) | Lire les signalements de réponses IA (seulement leur nombre) |
 | Modérer les groupes de travail (consultation journalisée et visible des élèves) | Écrire dans un groupe créé par des élèves |
 | Journal d’audit, calendrier de l’établissement, export/suppression RGPD, 2FA | Changer le rôle ou l’e-mail d’un compte existant |
@@ -51,6 +51,14 @@ Pour : comprendre ses cours, s’entraîner, s’organiser, travailler avec ses 
 | Alertes de sécurité | — | — | oui |
 | Journal d’audit | — | — | oui |
 | Groupes de travail | les siens | ses classes, journalisé | modération, journalisé |
+
+## Détail du pilotage : jusqu'où aller
+La direction voit le détail **par classe, par niveau et par matière**, mais jamais plus fin :
+- **Jamais** un élève nommé ni un professeur nommé, et pas de classement.
+- Une activité n'est affichée qu'à partir de **5 élèves**.
+- L'activité d'une **matière** n'est affichée que si **au moins 2 professeurs** l'enseignent : sinon, ce serait l'évaluation d'une personne (qui doit rester l'affaire de la direction avec le professeur, hors de l'outil). La case est alors masquée avec la raison.
+- Les croisements matière × niveau ne sont pas proposés, pour la même raison.
+Si la direction veut aller plus loin, la bonne voie est un échange avec le professeur concerné, pas une donnée de plus dans l'outil.
 
 ## Évolution possible (non réalisée)
 Un rôle unique « administration » regroupe aujourd’hui la direction et le secrétariat. À terme, on peut les séparer : **secrétariat** (comptes, import, structure, sans statistiques), **direction** (pilotage et alertes, sans gestion de comptes), **vie scolaire / CPE** (alertes et groupes de ses niveaux), **professeur principal** (vue de sa classe), **référent numérique**, **DPO** (audit et droits RGPD). Le modèle de droits est centralisé dans `canManageCourse` / `canAccessCourse` (`server/auth.mjs`) et les gardes de `server/admin.mjs`, ce qui permet d’ajouter ces rôles sans réécrire les cours.

@@ -1061,3 +1061,140 @@ test("rôles : le professeur gère ses cours mais pas la structure ni les compte
   const ai = await as("teacher", "/api/ai/capabilities");
   assert.ok(ai.data.recipes.length > 0);
 });
+
+test("pilotage détaillé : niveaux et matières, avec seuils anti-évaluation", async () => {
+  const subject = await admin("/api/admin/subjects", "POST", {
+    name: uniq("Détail "),
+  });
+  const subjectId = subject.data.subject.id;
+  const level = uniq("Niveau ");
+  const classA = await admin("/api/admin/classes", "POST", {
+    name: uniq("DA "),
+    level,
+  });
+  const classB = await admin("/api/admin/classes", "POST", {
+    name: uniq("DB "),
+    level,
+  });
+  const teachers = [];
+  for (const klass of [classA, classB]) {
+    const t = await admin("/api/admin/users", "POST", {
+      name: `Prof Détail ${teachers.length}`,
+      role: "teacher",
+      email: `${uniq("pd")}@exemple.fr`,
+    });
+    teachers.push(t.data.user.id);
+    await admin("/api/admin/assignments", "POST", {
+      teacher_id: t.data.user.id,
+      class_id: klass.data.class.id,
+      subject_id: subjectId,
+    });
+  }
+  const courses = [];
+  for (const [i, klass] of [classA, classB].entries()) {
+    const id = uniq("course-detail-");
+    fixtureDb
+      .prepare("INSERT INTO courses VALUES (?,?,?,?,?,?,?)")
+      .run(
+        id,
+        "school-demo",
+        klass.data.class.id,
+        subjectId,
+        teachers[i],
+        `Cours ${i}`,
+        new Date().toISOString(),
+      );
+    courses.push(id);
+  }
+  const before = await admin("/api/admin/pilotage");
+  const hiddenSubject = before.data.subjects.find(
+    (s) => s.subject === subject.data.subject.name,
+  );
+  assert.equal(
+    hiddenSubject.activityHidden,
+    true,
+    "Moins de 5 élèves : masqué",
+  );
+  const students = [];
+  for (let i = 0; i < 6; i++) {
+    const s = await admin("/api/admin/users", "POST", {
+      name: `Élève Détail ${i}`,
+      role: "student",
+      class_id: (i % 2 ? classA : classB).data.class.id,
+    });
+    students.push(s.data.user.id);
+  }
+  for (const [i, id] of students.entries())
+    fixtureDb
+      .prepare("INSERT INTO learning_chats VALUES (?,?,?,?,?,?,?,?)")
+      .run(
+        uniq("chat-"),
+        id,
+        "school-demo",
+        courses[i % 2],
+        "Question privée SECRET_Q",
+        "Réponse",
+        "[]",
+        new Date().toISOString(),
+      );
+  const after = await admin("/api/admin/pilotage");
+  const shown = after.data.subjects.find(
+    (s) => s.subject === subject.data.subject.name,
+  );
+  assert.equal(
+    shown.activityHidden,
+    undefined,
+    "2 professeurs et 6 élèves : affiché",
+  );
+  assert.equal(shown.studentsUsingAssistant30d, 6);
+  assert.equal(shown.aiQuestions30d, 6);
+  assert.equal(shown.courses, 2);
+  const lvl = after.data.levels.find((l) => l.level === level);
+  assert.equal(lvl.classes, 2);
+  assert.equal(lvl.students, 6);
+  assert.equal(lvl.activityHidden, undefined);
+  const dump = JSON.stringify(after.data);
+  for (const forbidden of [
+    "Prof Détail",
+    "Élève Détail",
+    "SECRET_Q",
+    teachers[0],
+  ])
+    assert.ok(!dump.includes(forbidden), forbidden);
+  // Une matière enseignée par un seul professeur reste masquée même avec beaucoup d'élèves.
+  const solo = await admin("/api/admin/subjects", "POST", {
+    name: uniq("Solo "),
+  });
+  const soloCourse = uniq("course-solo-");
+  fixtureDb
+    .prepare("INSERT INTO courses VALUES (?,?,?,?,?,?,?)")
+    .run(
+      soloCourse,
+      "school-demo",
+      classA.data.class.id,
+      solo.data.subject.id,
+      teachers[0],
+      "Cours solo",
+      new Date().toISOString(),
+    );
+  for (const id of students)
+    fixtureDb
+      .prepare("INSERT INTO learning_chats VALUES (?,?,?,?,?,?,?,?)")
+      .run(
+        uniq("chat-"),
+        id,
+        "school-demo",
+        soloCourse,
+        "q",
+        "r",
+        "[]",
+        new Date().toISOString(),
+      );
+  const withSolo = await admin("/api/admin/pilotage");
+  const hidden = withSolo.data.subjects.find(
+    (s) => s.subject === solo.data.subject.name,
+  );
+  assert.equal(hidden.activityHidden, true);
+  assert.match(hidden.reason, /Un seul professeur/);
+  assert.equal(hidden.aiQuestions30d, undefined);
+});

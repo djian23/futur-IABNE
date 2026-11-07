@@ -606,6 +606,99 @@ export function registerAdminRoutes(app) {
         .get(sid, from, to, sid, from, to).n;
       weekly.push({ weekStart: from.slice(0, 10), activeStudents: users });
     }
+    // Détail par niveau (toutes matières confondues) : plusieurs professeurs, donc pas de jugement individuel.
+    const levels = [
+      ...new Set(classes.filter((c) => c.kind === "class").map((c) => c.level)),
+    ].map((level) => {
+      const inLevel = classes.filter(
+        (c) => c.kind === "class" && c.level === level,
+      );
+      const students = [
+        ...new Set(
+          inLevel.flatMap((c) =>
+            db
+              .prepare(
+                "SELECT m.user_id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.class_id=? AND u.role='student' AND u.active=1",
+              )
+              .all(c.id)
+              .map((r) => r.user_id),
+          ),
+        ),
+      ];
+      const row = { level, classes: inLevel.length, students: students.length };
+      if (students.length < 5) return { ...row, activityHidden: true };
+      const marks = students.map(() => "?").join(",");
+      return {
+        ...row,
+        activeStudents7d: students.filter((id) => activeWeek.has(id)).length,
+        aiRequests30d: one(
+          `SELECT COUNT(*) n FROM learning_usage WHERE created_at>=? AND user_id IN (${marks})`,
+          month,
+          ...students,
+        ),
+        quizAnswers30d: one(
+          `SELECT COUNT(*) n FROM learning_quiz_answers WHERE created_at>=? AND user_id IN (${marks})`,
+          month,
+          ...students,
+        ),
+      };
+    });
+    // Détail par matière (tous niveaux confondus). Règle anti-évaluation : l'activité d'une matière
+    // n'est affichée que si au moins 2 professeurs l'enseignent et si au moins 5 élèves l'utilisent.
+    const subjects = db
+      .prepare("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name")
+      .all(sid)
+      .map((sub) => {
+        const courses = db
+          .prepare(
+            `SELECT k.id,k.teacher_id FROM courses k JOIN classes c ON c.id=k.class_id
+             LEFT JOIN classes_meta m ON m.class_id=c.id WHERE k.subject_id=? AND m.archived_at IS NULL`,
+          )
+          .all(sub.id);
+        const ids = courses.map((c) => c.id);
+        const teachers = new Set(courses.map((c) => c.teacher_id)).size;
+        const row = {
+          subject: sub.name,
+          courses: courses.length,
+          coursesWithContent: ids.filter(
+            (id) =>
+              one(
+                "SELECT COUNT(*) n FROM documents WHERE course_id=? AND status='published'",
+                id,
+              ) > 0,
+          ).length,
+        };
+        if (!ids.length)
+          return { ...row, activityHidden: true, reason: "Aucun cours" };
+        const marks = ids.map(() => "?").join(",");
+        const askers = one(
+          `SELECT COUNT(DISTINCT user_id) n FROM learning_chats WHERE created_at>=? AND course_id IN (${marks})`,
+          month,
+          ...ids,
+        );
+        if (teachers < 2)
+          return {
+            ...row,
+            activityHidden: true,
+            reason:
+              "Un seul professeur : détail masqué pour ne pas évaluer une personne",
+          };
+        if (askers < 5)
+          return {
+            ...row,
+            activityHidden: true,
+            reason: "Moins de 5 élèves : détail masqué",
+          };
+        return {
+          ...row,
+          studentsUsingAssistant30d: askers,
+          aiQuestions30d: one(
+            `SELECT COUNT(*) n FROM learning_chats WHERE created_at>=? AND course_id IN (${marks})`,
+            month,
+            ...ids,
+          ),
+        };
+      });
     const uncovered = db
       .prepare(
         `SELECT c.name AS class_name,s.name AS subject
@@ -668,10 +761,12 @@ export function registerAdminRoutes(app) {
         ),
       },
       classes,
+      levels,
+      subjects,
       weekly,
       coursesWithoutContent: uncovered,
       privacy:
-        "Agrégats uniquement : aucun élève, aucun professeur nommé, aucun contenu de cours ni de conversation. Activité d’une classe masquée sous 5 élèves.",
+        "Agrégats uniquement : aucun élève, aucun professeur nommé, aucun contenu de cours ni de conversation. Activité masquée sous 5 élèves ; détail d’une matière masqué si un seul professeur l’enseigne.",
     });
   });
 

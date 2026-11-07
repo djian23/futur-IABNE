@@ -1347,7 +1347,15 @@ export function Pilotage({ onNavigate }) {
   }, []);
   if (error) return <div className="alert error">{error}</div>;
   if (!data) return <p className="muted">Chargement…</p>;
-  const { totals, attention, classes, weekly, coursesWithoutContent } = data;
+  const {
+    totals,
+    attention,
+    classes,
+    weekly,
+    coursesWithoutContent,
+    levels,
+    subjects,
+  } = data;
   const maxWeekly = Math.max(1, ...weekly.map((w) => w.activeStudents));
   const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
   return (
@@ -1446,6 +1454,80 @@ export function Pilotage({ onNavigate }) {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+      <div className="two-col">
+        <div className="panel">
+          <h3>Par niveau</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Niveau</th>
+                  <th>Élèves</th>
+                  <th>Actifs 7 j</th>
+                  <th>Questions IA 30 j</th>
+                  <th>Quiz 30 j</th>
+                </tr>
+              </thead>
+              <tbody>
+                {levels.map((l) => (
+                  <tr key={l.level}>
+                    <td>
+                      {l.level}{" "}
+                      <small>
+                        ({l.classes} classe{l.classes > 1 ? "s" : ""})
+                      </small>
+                    </td>
+                    <td>{l.students}</td>
+                    <td>
+                      {l.activityHidden
+                        ? "—"
+                        : `${pct(l.activeStudents7d, l.students)} %`}
+                    </td>
+                    <td>{l.activityHidden ? "—" : l.aiRequests30d}</td>
+                    <td>{l.activityHidden ? "—" : l.quizAnswers30d}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="panel">
+          <h3>Par matière</h3>
+          <p className="muted">
+            L’activité d’une matière n’est affichée que si plusieurs professeurs
+            l’enseignent et si au moins 5 élèves l’utilisent : ces chiffres ne
+            servent pas à évaluer une personne.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Matière</th>
+                  <th>Cours avec contenu</th>
+                  <th>Élèves avec l’assistant</th>
+                  <th>Questions 30 j</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjects.map((s) => (
+                  <tr key={s.subject}>
+                    <td>{s.subject}</td>
+                    <td>
+                      {s.coursesWithContent}/{s.courses}
+                    </td>
+                    <td title={s.reason || ""}>
+                      {s.activityHidden ? "—" : s.studentsUsingAssistant30d}
+                    </td>
+                    <td title={s.reason || ""}>
+                      {s.activityHidden ? "—" : s.aiQuestions30d}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {coursesWithoutContent.length > 0 && (
