@@ -339,6 +339,13 @@ function Accounts({ data, act, busy, kind = "full" }) {
       )}
       <div className="panel">
         <h3>Comptes ({list.total})</h3>
+        {!canManage && (
+          <p className="muted">
+            Profil direction : vous consultez les comptes et traitez les droits
+            RGPD (export, suppression). La création et la modification des
+            comptes relèvent du secrétariat.
+          </p>
+        )}
         <div className="filters">
           <input
             aria-label="Rechercher un compte"
@@ -1632,7 +1639,7 @@ export default function Administration({ data, act, busy }) {
   const all = ["full", "secretariat", "direction"];
   const tabs = [
     ["overview", "Vue d’ensemble", all],
-    ["users", kind === "direction" ? "Comptes (lecture)" : "Comptes", all],
+    ["users", "Comptes", all],
     ["import", "Importer", ["full", "secretariat"]],
     ["structure", "Classes & cours", ["full", "secretariat"]],
     ["year", "Nouvelle année", ["full", "secretariat"]],

@@ -342,7 +342,12 @@ function App() {
             </span>
             <span>
               <strong>{user.name || user.email}</strong>
-              <small>{labelRole[role] || role}</small>
+              <small>
+                {labelRole[role] || role}
+                {admin
+                  ? ` · ${{ full: "profil complet", secretariat: "secrétariat", direction: "direction" }[adminKind] || ""}`
+                  : ""}
+              </small>
             </span>
             <LogOut size={17} />
           </button>
