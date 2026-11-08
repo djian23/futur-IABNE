@@ -62,6 +62,24 @@ const slug = (s) =>
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 
+// Ordre scolaire des niveaux (du collège à la terminale), puis les autres niveaux par ordre alphabétique.
+const LEVEL_ORDER = [
+  "sixieme",
+  "cinquieme",
+  "quatrieme",
+  "troisieme",
+  "seconde",
+  "premiere",
+  "terminale",
+];
+const levelRank = (name) => {
+  const i = LEVEL_ORDER.indexOf(slug(name));
+  return i < 0 ? LEVEL_ORDER.length : i;
+};
+const byLevel = (a, b) =>
+  levelRank(a.level) - levelRank(b.level) ||
+  String(a.name || a.level).localeCompare(String(b.name || b.level), "fr");
+
 export function audit(req, action, targetType, targetId, details = {}) {
   db.prepare("INSERT INTO audit_log VALUES (?,?,?,?,?,?,?,?)").run(
     uid(),
@@ -622,6 +640,7 @@ export function registerAdminRoutes(app) {
           } else row.activityHidden = true;
           return row;
         });
+      classes.sort(byLevel);
       // Série hebdomadaire : élèves ayant utilisé l'assistant ou répondu à un quiz.
       const weekly = [];
       for (let n = 7; n >= 0; n--) {

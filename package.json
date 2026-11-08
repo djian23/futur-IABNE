@@ -12,6 +12,7 @@
     "build": "vite build",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "provision": "node scripts/provision.mjs",
+    "seed:demo": "node scripts/seed-demo.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
     "format": "prettier --write src server scripts tests vite.config.js package.json railway.json index.html",

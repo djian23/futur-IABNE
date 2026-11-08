@@ -40,6 +40,8 @@ Consulter les résultats de la commande pour connaître les vérifications effec
 
 ## Démonstration
 
+Pour un établissement fictif complet (11 classes, 79 cours, 171 élèves, activité, groupes, alertes…), voir [DONNEES_DE_DEMONSTRATION.md](docs/DONNEES_DE_DEMONSTRATION.md) (`npm run seed:demo`).
+
 Les comptes suivants sont réservés aux données de démonstration, activées avec `SEED_DEMO=true` :
 
 | Profil | Identifiant |
