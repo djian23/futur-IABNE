@@ -2248,3 +2248,40 @@ html.comfort small {
   background: #3a6550;
   border-radius: 6px 6px 0 0;
 }
+.demo-switcher {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px dashed #b8860b;
+  border-radius: 10px;
+  background: #fffbea;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.demo-switcher label {
+  display: grid;
+  gap: 4px;
+}
+.demo-switcher select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #fff3cd;
+  border: 1px solid #e0b800;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}

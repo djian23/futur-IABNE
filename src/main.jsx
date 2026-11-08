@@ -311,6 +311,7 @@ function App() {
             <small>Collège · Lycée</small>
           </div>
         </div>
+        {user.demo_switcher && <DemoSwitcher user={user} />}
         <p className="nav-label">MON ESPACE</p>
         <nav aria-label="Navigation principale">
           {nav.map(([key, text, Icon]) => (
@@ -397,6 +398,24 @@ function App() {
           </div>
         </header>
         <main>
+          {user.demo_origin && (
+            <div className="demo-banner" role="status">
+              <span>
+                Mode démonstration : vous voyez IABNE comme{" "}
+                <strong>{user.name}</strong> ({labelRole[role] || role}).
+              </span>
+              <button
+                className="button small"
+                onClick={async () => {
+                  await post("/api/demo/return", {});
+                  window.location.hash = "#dashboard";
+                  window.location.reload();
+                }}
+              >
+                Revenir à mon compte ({user.demo_origin.name})
+              </button>
+            </div>
+          )}
           <div className="page-top">
             <div>
               <div className="eyebrow">L'ENVIE D'APPRENDRE, ENSEMBLE</div>
@@ -639,6 +658,61 @@ function App() {
           </footer>
         </main>
       </div>
+    </div>
+  );
+}
+function DemoSwitcher({ user }) {
+  const [accounts, setAccounts] = useState([]),
+    [choice, setChoice] = useState(""),
+    [error, setError] = useState("");
+  useEffect(() => {
+    api("/api/demo/accounts")
+      .then((r) => {
+        setAccounts(r.accounts);
+        setChoice(r.current);
+      })
+      .catch((e) => setError(e.message));
+  }, [user.id]);
+  const groups = [
+    ["Administration", accounts.filter((a) => a.role === "admin")],
+    ["Professeurs", accounts.filter((a) => a.role === "teacher")],
+    ["Élèves", accounts.filter((a) => a.role === "student")],
+  ];
+  async function go() {
+    if (!choice || choice === user.id) return;
+    try {
+      await post("/api/demo/switch", { user_id: choice });
+      window.location.hash = "#dashboard";
+      window.location.reload();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  return (
+    <div className="demo-switcher">
+      <strong>Mode démonstration</strong>
+      <label>
+        <span>Voir l’application comme…</span>
+        <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+          {groups.map(([label, list]) => (
+            <optgroup key={label} label={label}>
+              {list.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} — {a.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      <button
+        className="button small"
+        onClick={go}
+        disabled={!choice || choice === user.id}
+      >
+        Basculer
+      </button>
+      {error && <small role="alert">{error}</small>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { db, uid, now } from "./db.mjs";
 import { passwordProblem, sameActivationCode } from "./passwords.mjs";
 import { verifyTotp } from "./totp.mjs";
-import { adminCan } from "./permissions.mjs";
+import { adminCan, demoSwitcherEnabled } from "./permissions.mjs";
 
 export const publicUser = (u) =>
   u && {
@@ -40,6 +40,18 @@ export function requireAuth(req, res, next) {
       : {}),
     ...(extras?.login_id ? { login_id: extras.login_id } : {}),
   };
+  // Mode démonstration : indique si l'on regarde l'application « comme » un autre compte.
+  if (
+    demoSwitcherEnabled() &&
+    (user.role === "admin" || req.session.demoOrigin)
+  ) {
+    req.user.demo_switcher = true;
+    if (req.session.demoOrigin) {
+      req.user.demo_origin = db
+        .prepare("SELECT id,name FROM users WHERE id=?")
+        .get(req.session.demoOrigin);
+    }
+  }
   if (
     req.user.must_change_password &&
     !PASSWORD_CHANGE_ALLOWED.some((path) => req.originalUrl.startsWith(path))

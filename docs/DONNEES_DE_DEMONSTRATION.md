@@ -9,6 +9,14 @@ DATA_DIR=./data-demo npm run dev
 
 Le script refuse de s'exécuter en production, et sans `--reset` il refuse une base qui contient déjà des comptes. `--reset` supprime la base du dossier indiqué : ne l'utilisez que sur un dossier de démonstration. Les noms sont inventés ; toute ressemblance avec une personne réelle serait fortuite. Le jeu de données est reproductible (même graine à chaque exécution), l'activité est datée par rapport au jour d'exécution.
 
+## Le plus simple
+```sh
+npm run demo
+```
+Crée la base fictive dans `./data-demo` si elle n'existe pas, puis lance l'application avec la **bascule de profil** : connectez-vous avec `admin@demo.local`, puis, dans la barre latérale, « Voir l'application comme… » permet de passer en un clic sur un autre profil (direction, secrétariat, professeur, élève délégué…). Un bandeau jaune rappelle le profil vu et permet de « Revenir à mon compte ».
+
+La bascule n'existe que si `ENABLE_DEMO_SWITCHER=true` (ce que fait `npm run demo`), **jamais en production** (le démarrage échoue), seulement pour un compte d'administration, et seulement vers les comptes fictifs `@demo.local`. Chaque bascule est inscrite au journal d'audit. Dans un vrai établissement, elle donnerait accès aux conversations privées des élèves : ne l'activez jamais avec de vraies données.
+
 ## Contenu
 - **11 classes et groupes** : 6e A et B, 5e A, 4e A, 3e A, 2nde A et B, 1re A, Tle A, plus deux groupes d'enseignement (Spé Maths 1re + Tle, Hébreu avancé).
 - **16 professeurs**, dont plusieurs par matière (pour voir le détail du pilotage) et un seul pour d'autres (détail masqué) ; **171 élèves** ; **3 administrateurs** (complet, secrétariat, direction).

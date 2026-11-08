@@ -26,3 +26,11 @@ export const requireCapability = (capability) => (req, res, next) =>
           "Votre profil d’administration n’a pas accès à cette fonction. Elle relève d’un autre profil (secrétariat ou direction).",
         code: "admin_capability",
       });
+
+// Mode démonstration : un compte d'administration peut basculer sur les comptes FICTIFS
+// (@demo.local) pour tester l'application. Désactivé par défaut, interdit en production.
+export const demoSwitcherEnabled = () =>
+  process.env.ENABLE_DEMO_SWITCHER === "true" &&
+  process.env.NODE_ENV !== "production";
+export const isDemoAccountEmail = (email) =>
+  typeof email === "string" && /@demo\.local$/i.test(email);
